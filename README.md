@@ -40,11 +40,12 @@
 
 ## Установка и запуск
 
-```bash
 # Просто запустить
+```bash
 curl -sSL https://raw.githubusercontent.com/Case211/node-diagnostic/main/node-diagnostic.sh | sudo bash
-
+```
 # Или скачать и запустить
+```bash
 wget https://raw.githubusercontent.com/Case211/node-diagnostic/main/node-diagnostic.sh
 sudo bash node-diagnostic.sh
 ```
