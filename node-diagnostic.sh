@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
-# node-diagnostic.sh — диагностика VPN/Linux-ноды для YouTube, видео-CDN и популярных сервисов.
-# Компактный дашборд: прогресс-бар → сводка → вердикт → применение фиксов.
-# Детальный лог пишется в /tmp/node-diagnostic-<ts>.log
-# Источник: https://github.com/Case211/node-diagnostic
-# Запуск:
-#   sudo bash node-diagnostic.sh           # обычный прогон
-#   sudo bash node-diagnostic.sh --quick   # без долгих тестов (~1 мин вместо ~5)
-#   sudo bash node-diagnostic.sh -a        # сразу применить все рекомендованные фиксы
-#   sudo bash node-diagnostic.sh -h        # справка по опциям
+# node-diagnostic.sh — diagnose a VPN/Linux node for YouTube, video CDNs and popular services.
+# Compact dashboard: progress bar → summary → verdict → fix application.
+# A detailed log is written to /tmp/node-diagnostic-<ts>.log
+# Source: https://github.com/Case211/node-diagnostic
+# Run:
+#   sudo bash node-diagnostic.sh           # normal run
+#   sudo bash node-diagnostic.sh --quick   # without the long tests (~1 min instead of ~5)
+#   sudo bash node-diagnostic.sh -a        # apply all recommended fixes immediately
+#   sudo bash node-diagnostic.sh -h        # help on options
 
 SCRIPT_VERSION="3.4"
 set -u
 LANG=C.UTF-8
 
 # ────────────────────────────────────────────────────────────────────
-# Палитра / форматирование
+# Palette / formatting
 # ────────────────────────────────────────────────────────────────────
 if [ -t 1 ]; then
     R=$'\033[0;31m'; G=$'\033[0;32m'; Y=$'\033[1;33m'
@@ -41,27 +41,27 @@ while [ $# -gt 0 ]; do
         --version)            echo "node-diagnostic $SCRIPT_VERSION"; exit 0 ;;
         -h|--help)
             cat <<HELP
-node-diagnostic.sh v$SCRIPT_VERSION — диагностика VPN/Linux-ноды.
+node-diagnostic.sh v$SCRIPT_VERSION — diagnose a VPN/Linux node.
 
-Опции:
-  -q, --quick        Пропустить долгие тесты (mtr/4-flow/multi-CDN/services/variance/bufferbloat)
-  -v, --verbose      Старый детальный режим (всё на экран)
-  -a, --apply-all    Применить ВСЕ рекомендованные фиксы без вопросов
-  -n, --no-fixes     Не предлагать фиксы вообще
-      --dry-run      Показать что было бы применено, но не делать
-      --no-net       Без сетевых тестов (только локальная конфигурация)
-      --version      Показать версию и выйти
-  -h, --help         Эта справка
+Options:
+  -q, --quick        Skip the long tests (mtr/4-flow/multi-CDN/services/variance/bufferbloat)
+  -v, --verbose      Old verbose mode (everything on screen)
+  -a, --apply-all    Apply ALL recommended fixes without asking
+  -n, --no-fixes     Don't offer fixes at all
+      --dry-run      Show what would be applied, but don't do it
+      --no-net       No network tests (local configuration only)
+      --version      Show version and exit
+  -h, --help         This help
 
-Примеры:
-  sudo bash node-diagnostic.sh                    # полный прогон ~5 мин
-  sudo bash node-diagnostic.sh -q                 # быстрый прогон ~1 мин
-  sudo bash node-diagnostic.sh -q -a              # быстрый + автофикс
-  sudo bash node-diagnostic.sh --dry-run          # показать какие фиксы будут применены
+Examples:
+  sudo bash node-diagnostic.sh                    # full run ~5 min
+  sudo bash node-diagnostic.sh -q                 # quick run ~1 min
+  sudo bash node-diagnostic.sh -q -a              # quick + auto-fix
+  sudo bash node-diagnostic.sh --dry-run          # show which fixes would be applied
 HELP
             exit 0 ;;
         *)
-            echo "Неизвестная опция: $1 (см. --help)" >&2
+            echo "Unknown option: $1 (see --help)" >&2
             exit 2 ;;
     esac
     shift
@@ -73,7 +73,7 @@ FINDINGS_FILE=$(mktemp)
 SUMMARY_FILE=$(mktemp)
 
 # ────────────────────────────────────────────────────────────────────
-# Хелперы
+# Helpers
 # ────────────────────────────────────────────────────────────────────
 have() { command -v "$1" >/dev/null 2>&1; }
 
@@ -88,7 +88,7 @@ trap cleanup EXIT
 
 interrupted() {
     echo
-    echo -e "${Y}Прервано пользователем.${NC} Лог: $LOG"
+    echo -e "${Y}Interrupted by user.${NC} Log: $LOG"
     cleanup
     exit 130
 }
@@ -105,7 +105,7 @@ summary_kv() {
 
 CURL_FLAGS=(--connect-timeout 5 --retry 0 -4)
 
-# Финальная строка проверки (после завершения)
+# Final check line (after completion)
 print_line() {
     local i=$1 total=$2 icon=$3 name=$4 tail=$5
     local pct=$(( i * 100 / total ))
@@ -113,8 +113,8 @@ print_line() {
         "$i" "$total" "$pct" "$icon" "$name" "$tail"
 }
 
-# Прогресс «в работе» — Braille-спиннер, 10 кадров, обновляется ~10 раз/с.
-# Показываем общий % и ETA по среднему времени уже завершённых проверок.
+# "In progress" indicator — Braille spinner, 10 frames, refreshed ~10 times/s.
+# Shows overall % and ETA based on the average time of already-completed checks.
 print_progress() {
     local i=$1 total=$2 name=$3 frame=${4:-0} elapsed=${5:-0}
     local spin_frames=("⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏")
@@ -138,7 +138,7 @@ print_progress() {
     fi
 }
 
-# Иконка по статусу
+# Icon by status
 icon_for() {
     case "$1" in
         ok)   echo "${G}✓${NC}" ;;
@@ -149,8 +149,8 @@ icon_for() {
     esac
 }
 
-# Запускает функцию проверки в фоне, рисует плавный прогресс, печатает результат.
-# ETA считаем как (total - done) * average_time_per_check.
+# Runs the check function in the background, draws smooth progress, prints the result.
+# ETA is computed as (total - done) * average_time_per_check.
 declare -i CHECK_NUM=0
 declare -i CHECK_TOTAL_TIME=0
 declare -i CHECK_DONE=0
@@ -180,7 +180,7 @@ run_check() {
 
     local start frame=0
     start=$(date +%s)
-    # Polling каждые ~100ms — спиннер выглядит живым, не дёрганым
+    # Poll every ~100ms — the spinner looks alive, not jerky
     while kill -0 "$pid" 2>/dev/null; do
         local el=$(( $(date +%s) - start ))
         print_progress "$CHECK_NUM" "$CHECK_TOTAL" "$name" "$frame" "$el"
@@ -194,7 +194,7 @@ run_check() {
     CHECK_DONE=$(( CHECK_DONE + 1 ))
     [ "$CHECK_DONE" -gt 0 ] && ETA_AVG=$(( CHECK_TOTAL_TIME / CHECK_DONE ))
 
-    local st="bad" su="(нет результата)"
+    local st="bad" su="(no result)"
     if [ -s "$RES_FILE" ]; then
         st=$(sed -n '1p' "$RES_FILE")
         su=$(sed -n '2p' "$RES_FILE")
@@ -204,7 +204,7 @@ run_check() {
 }
 
 # ────────────────────────────────────────────────────────────────────
-# Установка зависимостей (тихо)
+# Dependency installation (quiet)
 # ────────────────────────────────────────────────────────────────────
 ensure_deps() {
     declare -A PKG_MAP=(
@@ -243,19 +243,19 @@ ensure_deps() {
 }
 
 # ════════════════════════════════════════════════════════════════════
-# ПРОВЕРКИ — каждая выставляет RES_STATUS и RES_SUMMARY
+# CHECKS — each one sets RES_STATUS and RES_SUMMARY
 # ════════════════════════════════════════════════════════════════════
 
-# 1. Идентификация
+# 1. Identification
 check_identify() {
     local h ip4 ip6 kern distro virt up
     h=$(hostname)
     ip4=$(curl "${CURL_FLAGS[@]}" -s --max-time 5 https://api.ipify.org || echo "")
     ip6=$(curl --connect-timeout 5 -6 -s --max-time 5 https://api64.ipify.org 2>/dev/null || echo "")
 
-    # Кросс-чек гео из 3 независимых источников (ipinfo / ip-api / ipwho)
-    # Хостинг-IP часто в одной базе показаны как FI, в другой как EE — фактический ДЦ
-    # надёжнее определить через latency, не WHOIS.
+    # Geo cross-check from 3 independent sources (ipinfo / ip-api / ipwho)
+    # Hosting IPs are often shown as FI in one database and EE in another — the actual
+    # datacenter is more reliably determined via latency, not WHOIS.
     local ipinfo_country="?" ipinfo_city="?" ipinfo_org="?"
     local ipapi_country="?"  ipapi_city="?"  ipapi_org="?"
     local ipwho_country="?"  ipwho_city="?"  ipwho_org="?"
@@ -282,8 +282,8 @@ check_identify() {
         fi
     fi
 
-    # Latency-проба к местным IX'ам — самая надёжная оценка реального положения ДЦ
-    # (TLD выбран по ipinfo, не доверяем — пробуем оба ближайших)
+    # Latency probe to local IXs — the most reliable estimate of the datacenter's real location
+    # (the TLD picked by ipinfo isn't trusted — we probe both nearest ones)
     local lat_helsinki lat_tallinn lat_stockholm lat_riga lat_warsaw
     lat_helsinki=$(ping -c 3 -W 1 -q nordu.net 2>/dev/null     | awk -F'/' '/rtt|round-trip/ {printf "%.1f", $5}')
     lat_tallinn=$(ping  -c 3 -W 1 -q estpak.ee 2>/dev/null     | awk -F'/' '/rtt|round-trip/ {printf "%.1f", $5}')
@@ -298,23 +298,23 @@ check_identify() {
 
     echo "Hostname: $h"
     echo "IPv4:     $ip4"
-    echo "IPv6:     ${ip6:-нет}"
+    echo "IPv6:     ${ip6:-none}"
     echo
-    echo "--- Geo cross-check (база | страна | город | ISP) ---"
+    echo "--- Geo cross-check (database | country | city | ISP) ---"
     printf "  ipinfo.io:   %-3s %s · %s\n"   "$ipinfo_country" "$ipinfo_city" "$ipinfo_org"
     printf "  ip-api.com:  %-3s %s · %s\n"   "$ipapi_country"  "$ipapi_city"  "$ipapi_org"
     printf "  ipwho.is:    %-3s %s · %s\n"   "$ipwho_country"  "$ipwho_city"  "$ipwho_org"
     echo
-    echo "--- Latency до национальных эндпоинтов (показывает реальную локацию ДЦ) ---"
-    printf "  Helsinki  (nordu.net):     %s ms\n" "${lat_helsinki:-нет}"
-    printf "  Tallinn   (estpak.ee):     %s ms\n" "${lat_tallinn:-нет}"
-    printf "  Stockholm (sunet.se):      %s ms\n" "${lat_stockholm:-нет}"
-    printf "  Riga      (lattelecom.lv): %s ms\n" "${lat_riga:-нет}"
-    printf "  Warsaw    (nask.pl):       %s ms\n" "${lat_warsaw:-нет}"
+    echo "--- Latency to national endpoints (shows the real datacenter location) ---"
+    printf "  Helsinki  (nordu.net):     %s ms\n" "${lat_helsinki:-n/a}"
+    printf "  Tallinn   (estpak.ee):     %s ms\n" "${lat_tallinn:-n/a}"
+    printf "  Stockholm (sunet.se):      %s ms\n" "${lat_stockholm:-n/a}"
+    printf "  Riga      (lattelecom.lv): %s ms\n" "${lat_riga:-n/a}"
+    printf "  Warsaw    (nask.pl):       %s ms\n" "${lat_warsaw:-n/a}"
     echo
     echo "Kernel: $kern  Distro: $distro  Virt: $virt  Uptime: $up"
 
-    # Конс-страны — если базы согласны, берём её. Если разногласия — флагаем.
+    # Consensus country — if the databases agree, take it. If they disagree, flag it.
     local countries=""
     [ "$ipinfo_country" != "?" ] && countries="$countries $ipinfo_country"
     [ "$ipapi_country"  != "?" ] && countries="$countries $ipapi_country"
@@ -322,7 +322,7 @@ check_identify() {
     local uniq_countries
     uniq_countries=$(echo "$countries" | tr ' ' '\n' | sort -u | grep -v '^$' | tr '\n' '/' | sed 's:/$::')
 
-    # Угадываем "реальную" локацию по самому маленькому ping'у
+    # Guess the "real" location from the smallest ping
     local real_loc="?" real_lat=99999
     for pair in "Helsinki:$lat_helsinki" "Tallinn:$lat_tallinn" "Stockholm:$lat_stockholm" "Riga:$lat_riga" "Warsaw:$lat_warsaw"; do
         local loc=${pair%%:*}
@@ -334,39 +334,39 @@ check_identify() {
         fi
     done
 
-    # Валидация: latency < 10ms = реально рядом, 10-30ms = в регионе, >30ms = непонятно
+    # Validation: latency < 10ms = really close, 10-30ms = in the region, >30ms = unclear
     local geo_lat_str="?"
     if [ "$real_loc" != "?" ]; then
         if have bc && (( $(echo "$real_lat < 10" | bc -l 2>/dev/null || echo 0) )); then
-            geo_lat_str="${real_loc} (~${real_lat} ms, рядом)"
+            geo_lat_str="${real_loc} (~${real_lat} ms, close)"
         elif have bc && (( $(echo "$real_lat < 30" | bc -l 2>/dev/null || echo 0) )); then
-            geo_lat_str="${real_loc} (~${real_lat} ms, в регионе)"
+            geo_lat_str="${real_loc} (~${real_lat} ms, in region)"
         else
-            geo_lat_str="не определено (все >30ms — туннель/потери искажают)"
+            geo_lat_str="undetermined (all >30ms — tunnel/loss distorts it)"
         fi
     fi
 
-    summary_kv "Хост"          "$h"
-    summary_kv "IP"            "$ip4"
-    summary_kv "Гео по базам"  "$uniq_countries"
-    summary_kv "Гео по latency" "$geo_lat_str"
-    summary_kv "ASN"           "${ipinfo_org:-${ipapi_org}}"
-    summary_kv "Ядро"          "$kern · $distro"
+    summary_kv "Host"           "$h"
+    summary_kv "IP"             "$ip4"
+    summary_kv "Geo (DBs)"      "$uniq_countries"
+    summary_kv "Geo by latency" "$geo_lat_str"
+    summary_kv "ASN"            "${ipinfo_org:-${ipapi_org}}"
+    summary_kv "Kernel"         "$kern · $distro"
 
     RES_STATUS=ok
     RES_SUMMARY="$h · $uniq_countries"
     [ "$real_loc" != "?" ] && RES_SUMMARY="$RES_SUMMARY · ~${real_lat}ms→$real_loc"
 
-    # Флагаем если разные базы дают разную страну
+    # Flag it if different databases give a different country
     local n_uniq
     n_uniq=$(echo "$uniq_countries" | tr '/' '\n' | grep -cv '^$')
     if [ "$n_uniq" -ge 2 ]; then
         RES_STATUS=warn
-        finding 1 geo "Базы расходятся по стране ($uniq_countries) — типично для хостинг-IP, регистрация ASN ≠ физический ДЦ. Реальная локация по latency: $real_loc"
+        finding 1 geo "Databases disagree on country ($uniq_countries) — typical for hosting IPs, ASN registration ≠ physical datacenter. Real location by latency: $real_loc"
     fi
 }
 
-# 2. CPU и нагрузка
+# 2. CPU and load
 check_cpu() {
     local nproc model load idle softirq iow
     nproc=$(nproc)
@@ -395,21 +395,21 @@ check_cpu() {
     if have bc; then
         if (( $(echo "$idle < 50" | bc -l 2>/dev/null || echo 0) )); then
             RES_STATUS=warn
-            RES_SUMMARY="$RES_SUMMARY · ⚠ перегружен"
-            finding 3 cpu "CPU idle ${idle}% — Xray упирается в шифрование, добавь ядра/перенеси нагрузку"
+            RES_SUMMARY="$RES_SUMMARY · ⚠ overloaded"
+            finding 3 cpu "CPU idle ${idle}% — Xray is bottlenecked on encryption, add cores/offload the load"
         fi
         if (( $(echo "${softirq:-0} > 15" | bc -l 2>/dev/null || echo 0) )); then
             [ "$RES_STATUS" = "ok" ] && RES_STATUS=warn
             RES_SUMMARY="$RES_SUMMARY · softirq ${softirq}%"
-            finding 2 cpu "softirq ${softirq}% — настрой RPS/RSS, иначе одно ядро забьёт прерываниями"
+            finding 2 cpu "softirq ${softirq}% — set up RPS/RSS, otherwise one core gets swamped by interrupts"
         fi
         if (( $(echo "${iow:-0} > 5" | bc -l 2>/dev/null || echo 0) )); then
-            finding 2 cpu "iowait ${iow}% — упор в диск (логи Xray? swap?)"
+            finding 2 cpu "iowait ${iow}% — disk bottleneck (Xray logs? swap?)"
         fi
     fi
 }
 
-# 3. Память
+# 3. Memory
 check_mem() {
     free -h
     local avail total pct swap_used
@@ -421,16 +421,16 @@ check_mem() {
     summary_kv "RAM" "$(free -h | awk '/Mem:/ {print $2" total · "$7" available"}')"
 
     RES_STATUS=ok
-    RES_SUMMARY="${pct}% доступно"
+    RES_SUMMARY="${pct}% available"
     if [ "$pct" -lt 15 ]; then
         RES_STATUS=warn
         RES_SUMMARY="$RES_SUMMARY ⚠"
-        finding 2 mem "Свободной памяти <15% — page cache страдает, фризы под нагрузкой"
+        finding 2 mem "Free memory <15% — page cache suffers, freezes under load"
     fi
     [ "$swap_used" -gt 0 ] && RES_SUMMARY="$RES_SUMMARY · swap used"
 }
 
-# 4. NIC / интерфейс
+# 4. NIC / interface
 check_nic() {
     local iface mtu drv speed rx_drops tx_drops rx_err tx_err
     iface=$(ip -4 route show default | awk '/default/ {print $5; exit}')
@@ -451,7 +451,7 @@ check_nic() {
         ethtool -k "$iface" 2>/dev/null | grep -E '^(rx-|tx-|generic-|tcp-segm|scatter)' | head -10
         echo "--- ring buffers ---"
         ethtool -g "$iface" 2>/dev/null | head -10
-        echo "--- ненулевые ошибки/дропы ---"
+        echo "--- non-zero errors/drops ---"
         ethtool -S "$iface" 2>/dev/null | awk '$NF+0 != 0' | grep -iE 'err|drop|miss|discard|fail|overflow' | head -10
     fi
 
@@ -461,19 +461,19 @@ check_nic() {
     RES_SUMMARY="$iface · mtu $mtu · drops ${rx_drops}/${tx_drops}"
 
     if [ "$mtu" -lt 1500 ]; then
-        finding 2 nic "MTU=$mtu < 1500 — подтоннель или GRE; проверь PMTU"
+        finding 2 nic "MTU=$mtu < 1500 — sub-tunnel or GRE; check PMTU"
     fi
     if [ "${rx_drops:-0}" -gt 1000 ]; then
         RES_STATUS=warn
-        finding 2 nic "RX drops $rx_drops — буфер интерфейса/ядра не справляется (rx_buffer / netdev_max_backlog)"
+        finding 2 nic "RX drops $rx_drops — interface/kernel buffer can't keep up (rx_buffer / netdev_max_backlog)"
     fi
     if [ "${tx_drops:-0}" -gt 1000 ]; then
         RES_STATUS=warn
-        finding 2 nic "TX drops $tx_drops — насыщение исходящего канала / qdisc"
+        finding 2 nic "TX drops $tx_drops — outbound link / qdisc saturation"
     fi
 }
 
-# 4b. Туннели (WireGuard / NetBird / Tailscale / OpenVPN / IPsec)
+# 4b. Tunnels (WireGuard / NetBird / Tailscale / OpenVPN / IPsec)
 check_tunnel() {
     local tunnels=()
     while IFS= read -r line; do
@@ -495,11 +495,11 @@ check_tunnel() {
 
     if [ ${#tunnels[@]} -eq 0 ]; then
         RES_STATUS=ok
-        RES_SUMMARY="туннелей нет"
+        RES_SUMMARY="no tunnels"
         return
     fi
 
-    echo "Найдены туннели: ${tunnels[*]}"
+    echo "Tunnels found: ${tunnels[*]}"
     local mtu_issue=0 def_via_tunnel=""
     for entry in "${tunnels[@]}"; do
         local kind=${entry%%:*}
@@ -509,29 +509,29 @@ check_tunnel() {
         peer=$(ip -4 addr show "$iface" 2>/dev/null | awk '/inet / {print $2}' | head -1)
         echo "  $kind ($iface): MTU=$mtu addr=$peer"
 
-        # NetBird/WireGuard MTU обычно 1280-1420 — нормально, но при 1280 на 1500 underlay будет фрагментация
+        # NetBird/WireGuard MTU is usually 1280-1420 — fine, but at 1280 on a 1500 underlay there will be fragmentation
         if [ -n "$mtu" ] && [ "$mtu" -lt 1280 ]; then
             mtu_issue=1
-            finding 2 tunnel "Туннель $iface MTU=$mtu < 1280 — слишком мелкий, потеряешь скорость"
+            finding 2 tunnel "Tunnel $iface MTU=$mtu < 1280 — too small, you'll lose speed"
         fi
         if [ "$iface" = "$def_iface" ]; then
             def_via_tunnel=$iface
         fi
     done
 
-    summary_kv "Туннели" "${#tunnels[@]} активных: ${tunnels[*]}"
+    summary_kv "Tunnels" "${#tunnels[@]} active: ${tunnels[*]}"
 
     if [ -n "$def_via_tunnel" ]; then
         RES_STATUS=warn
-        RES_SUMMARY="${#tunnels[@]} активн., default через $def_via_tunnel"
-        finding 2 tunnel "Default route идёт через туннель $def_via_tunnel — весь трафик ноды заворачивается в overlay (пиринг ASN не работает напрямую)"
+        RES_SUMMARY="${#tunnels[@]} active, default via $def_via_tunnel"
+        finding 2 tunnel "Default route goes through tunnel $def_via_tunnel — all node traffic is wrapped into the overlay (ASN peering doesn't work directly)"
     elif [ "$mtu_issue" = "1" ]; then
         RES_STATUS=warn
-        RES_SUMMARY="${#tunnels[@]} активн., MTU мелкий"
+        RES_SUMMARY="${#tunnels[@]} active, MTU small"
     else
         RES_STATUS=ok
-        RES_SUMMARY="${#tunnels[@]} активн., default через $def_iface"
-        finding 1 tunnel "Активные туннели (${tunnels[*]}). Default не через них — это ок"
+        RES_SUMMARY="${#tunnels[@]} active, default via $def_iface"
+        finding 1 tunnel "Active tunnels (${tunnels[*]}). Default isn't via them — that's fine"
     fi
 }
 
@@ -551,19 +551,19 @@ check_tcp_cc() {
     if [ "$cc" != "bbr" ]; then
         if echo "$avail" | grep -q bbr; then
             RES_STATUS=warn
-            RES_SUMMARY="$cc (bbr доступен!)"
-            finding 3 tcp "BBR доступен но не активен — sysctl -w net.ipv4.tcp_congestion_control=bbr"
+            RES_SUMMARY="$cc (bbr available!)"
+            finding 3 tcp "BBR is available but not active — sysctl -w net.ipv4.tcp_congestion_control=bbr"
         else
             RES_STATUS=bad
-            RES_SUMMARY="bbr недоступен"
-            finding 3 tcp "BBR отсутствует в ядре — обнови ядро"
+            RES_SUMMARY="bbr unavailable"
+            finding 3 tcp "BBR is missing from the kernel — update the kernel"
         fi
     fi
     case "$qdisc" in
         fq|fq_codel|cake) ;;
         *)
             [ "$RES_STATUS" = "ok" ] && RES_STATUS=warn
-            finding 2 tcp "qdisc=$qdisc — для BBR нужен fq, для bufferbloat — fq_codel/cake"
+            finding 2 tcp "qdisc=$qdisc — BBR needs fq, bufferbloat needs fq_codel/cake"
             ;;
     esac
 }
@@ -593,14 +593,14 @@ check_tcp_tuning() {
 
     if [ ${#issues[@]} -eq 0 ]; then
         RES_STATUS=ok
-        RES_SUMMARY="всё ок"
+        RES_SUMMARY="all good"
     else
         RES_STATUS=warn
         RES_SUMMARY="$(IFS=, ; echo "${issues[*]}")"
-        [ "$mtu_probe" = "0" ] && finding 3 tcp "tcp_mtu_probing=0 — при PMTU-blackhole TCP-сессии виснут (классика «зависшая подгрузка»)"
-        [ "$slow_start" = "1" ] && finding 2 tcp "tcp_slow_start_after_idle=1 — после паузы скорость падает в slow-start. Лучше 0"
-        [ "$rmem_max" -lt 16777216 ] && finding 2 tcp "rmem_max=$rmem_max < 16M — на гиг-канале мелкое TCP-окно режет скорость"
-        [ "${backlog:-0}" -lt 4096 ] && finding 1 tcp "netdev_max_backlog=$backlog — мало под нагрузку, рекомендую 16384"
+        [ "$mtu_probe" = "0" ] && finding 3 tcp "tcp_mtu_probing=0 — on a PMTU blackhole TCP sessions hang (the classic \"stuck loading\")"
+        [ "$slow_start" = "1" ] && finding 2 tcp "tcp_slow_start_after_idle=1 — after a pause speed drops into slow-start. 0 is better"
+        [ "$rmem_max" -lt 16777216 ] && finding 2 tcp "rmem_max=$rmem_max < 16M — on a gig link the small TCP window caps speed"
+        [ "${backlog:-0}" -lt 4096 ] && finding 1 tcp "netdev_max_backlog=$backlog — too small for load, 16384 recommended"
     fi
 
     summary_kv "TCP tuning" "$RES_SUMMARY"
@@ -610,7 +610,7 @@ check_tcp_tuning() {
 check_conntrack() {
     if [ ! -r /proc/sys/net/netfilter/nf_conntrack_count ]; then
         RES_STATUS=skip
-        RES_SUMMARY="conntrack модуль не загружен"
+        RES_SUMMARY="conntrack module not loaded"
         return
     fi
     local cur max pct
@@ -619,7 +619,7 @@ check_conntrack() {
     pct=$((100 * cur / (max > 0 ? max : 1)))
     echo "count=$cur max=$max ($pct%)"
     if have conntrack; then
-        echo "--- топ-10 dst ---"
+        echo "--- top-10 dst ---"
         conntrack -L 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i ~ /^dst=/) {gsub("dst=","",$i); print $i; break}}' \
             | sort | uniq -c | sort -rn | head -10
     fi
@@ -630,10 +630,10 @@ check_conntrack() {
     RES_SUMMARY="$cur / $max ($pct%)"
     if [ "$pct" -ge 80 ]; then
         RES_STATUS=bad
-        finding 3 conntrack "Conntrack заполнен на $pct% — новые соединения дропаются. Это и есть «шортсы не открываются». nf_conntrack_max → 524288"
+        finding 3 conntrack "Conntrack is $pct% full — new connections are being dropped. This is exactly \"Shorts won't open\". nf_conntrack_max → 524288"
     elif [ "$pct" -ge 50 ]; then
         RES_STATUS=warn
-        finding 1 conntrack "Conntrack использован на $pct% — близко к лимиту"
+        finding 1 conntrack "Conntrack is $pct% used — close to the limit"
     fi
 }
 
@@ -642,7 +642,7 @@ check_dns() {
     cat /etc/resolv.conf 2>/dev/null
     local fail=0 total=0 lat_sum=0
     if have dig; then
-        echo "--- 5 запросов youtube.com ---"
+        echo "--- 5 queries to youtube.com ---"
         for _ in 1 2 3 4 5; do
             total=$((total+1))
             local ans t
@@ -655,7 +655,7 @@ check_dns() {
                 lat_sum=$((lat_sum + t))
             fi
         done
-        echo "--- основные хосты ---"
+        echo "--- main hosts ---"
         for host in www.google.com youtube.com googlevideo.com www.youtube.com i.ytimg.com; do
             local a4 a6
             a4=$(dig +short +time=2 +tries=1 "$host" A 2>/dev/null | head -1)
@@ -668,23 +668,23 @@ check_dns() {
 
     if [ "$total" -eq 0 ]; then
         RES_STATUS=skip
-        RES_SUMMARY="(dig недоступен)"
+        RES_SUMMARY="(dig unavailable)"
     elif [ "$fail" -gt 0 ]; then
         RES_STATUS=warn
-        RES_SUMMARY="$fail/$total попыток с фейлом"
-        finding 3 dns "DNS таймаутит ($fail/$total) — резолв googlevideo фейлится → клиент попадает на старый/медленный PoP"
+        RES_SUMMARY="$fail/$total attempts failed"
+        finding 3 dns "DNS is timing out ($fail/$total) — googlevideo resolution fails → the client lands on an old/slow PoP"
     else
         local avg=$((lat_sum / total))
-        RES_SUMMARY="${avg}ms среднее"
+        RES_SUMMARY="${avg}ms average"
         RES_STATUS=ok
-        [ "$avg" -gt 100 ] && { RES_STATUS=warn; finding 1 dns "DNS-латенси ${avg}ms — медленный резолвер"; }
+        [ "$avg" -gt 100 ] && { RES_STATUS=warn; finding 1 dns "DNS latency ${avg}ms — slow resolver"; }
     fi
 }
 
-# 9. PMTU (бинарный поиск)
+# 9. PMTU (binary search)
 check_pmtu() {
-    # Робаст-проба: считаем размер OK если хотя бы 1 из 3 пакетов вернулся.
-    # Иначе на сети с потерями single-shot ping ловит false-negative и сходимость врёт.
+    # Robust probe: a size is considered OK if at least 1 of 3 packets came back.
+    # Otherwise, on a lossy network, a single-shot ping hits a false negative and convergence lies.
     pmtu_probe() {
         local size=$1 target=${2:-1.1.1.1}
         local recv
@@ -692,7 +692,7 @@ check_pmtu() {
         [ "${recv:-0}" -ge 1 ]
     }
 
-    echo "ping -M do -s 1472 → 1.1.1.1 (3 пакета)"
+    echo "ping -M do -s 1472 → 1.1.1.1 (3 packets)"
     if pmtu_probe 1472; then
         RES_STATUS=ok
         RES_SUMMARY="PMTU 1500 (full)"
@@ -711,23 +711,23 @@ check_pmtu() {
         [ $((hi - lo)) -le 1 ] && break
     done
     local mtu=$((best + 28))
-    echo "Максимальный безфраг payload: $best (=> path MTU ~$mtu)"
+    echo "Largest non-fragmented payload: $best (=> path MTU ~$mtu)"
 
     summary_kv "PMTU" "$mtu"
 
     RES_STATUS=warn
-    RES_SUMMARY="$mtu (вместо 1500)"
+    RES_SUMMARY="$mtu (instead of 1500)"
     if [ "$mtu" -lt 1450 ]; then
         RES_STATUS=bad
-        finding 3 pmtu "PMTU=$mtu — большие пакеты теряются. Нужно: tcp_mtu_probing=1 + iptables TCPMSS clamp"
+        finding 3 pmtu "PMTU=$mtu — large packets are dropped. Needed: tcp_mtu_probing=1 + iptables TCPMSS clamp"
     else
-        finding 2 pmtu "PMTU=$mtu < 1500 — включи tcp_mtu_probing=1 чтоб TCP не висел на blackhole"
+        finding 2 pmtu "PMTU=$mtu < 1500 — enable tcp_mtu_probing=1 so TCP doesn't hang on a blackhole"
     fi
 }
 
-# 10. Loss / latency до google
+# 10. Loss / latency to Google
 check_loss() {
-    # Извлекает loss% из вывода ping — ищем токен вида "20%"
+    # Extracts loss% from ping output — look for a token like "20%"
     parse_loss() {
         echo "$1" | awk '/packet loss/ {
             for (i=1; i<=NF; i++) if ($i ~ /^[0-9]+(\.[0-9]+)?%$/) {
@@ -755,27 +755,27 @@ check_loss() {
         [ "${loss:-0}" -gt "$g_loss" ] && g_loss=$loss
     done
 
-    summary_kv "Loss до Google" "max ${g_loss}%"
+    summary_kv "Loss to Google" "max ${g_loss}%"
 
     RES_STATUS=ok
     RES_SUMMARY="max ${g_loss}% loss"
     if [ "$g_loss" -ge 5 ]; then
         RES_STATUS=bad
-        finding 3 loss "Потери до Google до ${g_loss}% — TCP retransmits, видео фризит. Проблема пиринга провайдера"
+        finding 3 loss "Loss to Google up to ${g_loss}% — TCP retransmits, video freezes. Provider peering problem"
     elif [ "$g_loss" -gt 0 ]; then
         RES_STATUS=warn
-        finding 2 loss "Лёгкие потери до Google (${g_loss}%) — на грани"
+        finding 2 loss "Light loss to Google (${g_loss}%) — borderline"
     fi
 }
 
-# 11. MTR — ищем худший хоп
+# 11. MTR — find the worst hop
 check_mtr() {
-    have mtr || { RES_STATUS=skip; RES_SUMMARY="mtr недоступен"; return; }
+    have mtr || { RES_STATUS=skip; RES_SUMMARY="mtr unavailable"; return; }
     local out worst_loss worst_hop hops_total
     out=$(mtr -r -c 15 -n youtube.com 2>/dev/null)
     echo "$out"
-    # mtr-строка: "  3.|-- 100.64.120.0   0.0%  15  ..."
-    # Литеральный `|` в ERE — через [|] (a `\|` некоторые grep-и ловят как альтернацию).
+    # mtr line: "  3.|-- 100.64.120.0   0.0%  15  ..."
+    # Literal `|` in ERE — via [|] (some greps read `\|` as alternation).
     hops_total=$(echo "$out" | grep -cE '^ *[0-9]+\.[|]')
     worst_loss=$(echo "$out" | awk '
         BEGIN { max = -1 }
@@ -789,7 +789,7 @@ check_mtr() {
     echo "--- mtr → googlevideo.com ---"
     mtr -r -c 15 -n googlevideo.com 2>/dev/null
 
-    summary_kv "Маршрут" "$hops_total hops · max loss $worst_loss"
+    summary_kv "Route" "$hops_total hops · max loss $worst_loss"
 
     RES_STATUS=ok
     RES_SUMMARY="$hops_total hops"
@@ -797,12 +797,12 @@ check_mtr() {
     worst_pct=$(echo "$worst_loss" | awk -F'/' '{gsub("%","",$2); print $2+0}')
     if [ -n "$worst_pct" ] && [ "$worst_pct" -ge 30 ]; then
         RES_STATUS=bad
-        RES_SUMMARY="${hops_total}h · loss ${worst_pct}% на $worst_loss"
-        finding 3 route "На пути к YouTube хоп с потерями $worst_loss — это битый пиринг ASN"
+        RES_SUMMARY="${hops_total}h · loss ${worst_pct}% at $worst_loss"
+        finding 3 route "On the path to YouTube there's a hop with loss $worst_loss — this is broken ASN peering"
     elif [ -n "$worst_pct" ] && [ "$worst_pct" -ge 10 ]; then
         RES_STATUS=warn
-        RES_SUMMARY="${hops_total}h · loss ${worst_pct}% на $worst_loss"
-        finding 2 route "Хоп с потерями $worst_loss — стоит сообщить хостеру"
+        RES_SUMMARY="${hops_total}h · loss ${worst_pct}% at $worst_loss"
+        finding 2 route "Hop with loss $worst_loss — worth reporting to the host"
     fi
 }
 
@@ -827,15 +827,15 @@ check_quic() {
     RES_SUMMARY="udp ok"
     if [ $udp_ok -eq 0 ]; then
         RES_STATUS=warn
-        RES_SUMMARY="UDP/443 заблокирован?"
-        finding 2 quic "UDP/443 не проходит — клиенты валятся на TCP, шортсы дольше стартуют"
+        RES_SUMMARY="UDP/443 blocked?"
+        finding 2 quic "UDP/443 doesn't get through — clients fall back to TCP, Shorts take longer to start"
     fi
     if [ $h3_ok -eq 0 ] && curl --help all 2>/dev/null | grep -q -- '--http3'; then
-        finding 1 quic "curl --http3 не отвечает — QUIC до Google ослаб"
+        finding 1 quic "curl --http3 doesn't respond — QUIC to Google is degraded"
     fi
 }
 
-# 13. Скорость: одиночный поток (Cachefly 100 МБ)
+# 13. Speed: single flow (Cachefly 100 MB)
 check_speed_single() {
     local out spd_bps spd_mbit code size
     out=$(curl "${CURL_FLAGS[@]}" -sS -o /dev/null --max-time 12 \
@@ -845,13 +845,13 @@ check_speed_single() {
     spd_bps=$(echo "$out" | cut -d'|' -f1)
     size=$(echo    "$out" | cut -d'|' -f2)
     code=$(echo    "$out" | cut -d'|' -f4)
-    # curl при таймауте отдаёт "0.000" — приводим к целому
+    # curl returns "0.000" on timeout — coerce to an integer
     local spd_int
     spd_int=$(printf '%.0f' "${spd_bps:-0}" 2>/dev/null || echo 0)
     if [ -z "$spd_bps" ] || [ "${spd_int:-0}" -lt 10000 ]; then
         RES_STATUS=bad
         RES_SUMMARY="fail (size=${size:-?}, http=${code:-?})"
-        finding 3 speed "Cachefly 100MB не докачался (${size:-0} bytes, http=${code:-?}) — канал/блокировка"
+        finding 3 speed "Cachefly 100MB didn't finish downloading (${size:-0} bytes, http=${code:-?}) — link/block"
         summary_kv "Speed (1-flow)" "fail"
         return
     fi
@@ -863,14 +863,14 @@ check_speed_single() {
     RES_SUMMARY="${spd_mbit} Mbit/s"
     if [ "${spd_mbit:-0}" -lt 50 ]; then
         RES_STATUS=bad
-        finding 3 speed "1-flow ${spd_mbit} Mbit/s — очень низкая скорость, видео не пойдёт"
+        finding 3 speed "1-flow ${spd_mbit} Mbit/s — very low speed, video won't play"
     elif [ "${spd_mbit:-0}" -lt 200 ]; then
         RES_STATUS=warn
-        finding 2 speed "1-flow ${spd_mbit} Mbit/s — нода работает, но шортсы могут запинаться при многих юзерах"
+        finding 2 speed "1-flow ${spd_mbit} Mbit/s — the node works, but Shorts may stutter with many users"
     fi
 }
 
-# 14. Скорость: 4 параллельных потока
+# 14. Speed: 4 parallel flows
 check_speed_4flow() {
     local tmpd
     tmpd=$(mktemp -d)
@@ -906,14 +906,14 @@ check_speed_4flow() {
 
     if [ "$total" -eq 0 ]; then
         RES_STATUS=bad
-        RES_SUMMARY="fail (Cachefly недоступен)"
-        finding 2 speed "4-flow тест не получил данные — параллельные TLS-сессии режутся?"
+        RES_SUMMARY="fail (Cachefly unreachable)"
+        finding 2 speed "4-flow test got no data — are parallel TLS sessions being throttled?"
         summary_kv "Speed (4-flow)" "fail"
         return
     fi
     local mbits
     mbits=$(echo "scale=0; $total * 8 / $dur / 1000000 / 1" | bc -l 2>/dev/null)
-    echo "4-flow combined: $mbits Mbit/s ($total bytes за ${dur}s)"
+    echo "4-flow combined: $mbits Mbit/s ($total bytes in ${dur}s)"
 
     summary_kv "Speed (4-flow)" "${mbits} Mbit/s"
 
@@ -921,7 +921,7 @@ check_speed_4flow() {
     RES_SUMMARY="${mbits} Mbit/s combined"
     if [ "$mbits" -lt 100 ]; then
         RES_STATUS=warn
-        finding 2 speed "4-flow всего ${mbits} Mbit/s — канал маленький либо троттлит"
+        finding 2 speed "4-flow only ${mbits} Mbit/s — the link is small or being throttled"
     fi
 }
 
@@ -931,7 +931,7 @@ check_bufferbloat() {
     base=$(ping -c 10 -i 0.2 -W 2 -q 1.1.1.1 2>/dev/null | awk -F'/' '/rtt|round-trip/ {print $5}')
     echo "baseline avg: ${base:-?} ms"
 
-    # Считаем сколько реально скачали — иначе тест без нагрузки бессмысленен
+    # Count how much we actually downloaded — otherwise the test without load is meaningless
     local size_file
     size_file=$(mktemp)
     ( curl "${CURL_FLAGS[@]}" --max-time 12 -sS -o /dev/null \
@@ -952,27 +952,27 @@ check_bufferbloat() {
     rm -f "$size_file"
     echo "under load avg: ${under:-?} ms · downloaded ${downloaded} bytes"
 
-    # Если download не дошёл хотя бы до 5 МБ — линк не нагрузился, мерять нечего
+    # If the download didn't reach at least 5 MB — the link wasn't loaded, nothing to measure
     if [ "${downloaded:-0}" -lt 5000000 ]; then
         RES_STATUS=skip
-        RES_SUMMARY="download fail (${downloaded:-0} bytes) — нагрузка не пошла"
-        finding 1 bufferbloat "Не удалось загрузить канал для измерения bufferbloat (Cachefly blocked? канал упал?)"
+        RES_SUMMARY="download fail (${downloaded:-0} bytes) — load didn't start"
+        finding 1 bufferbloat "Couldn't load the link to measure bufferbloat (Cachefly blocked? link down?)"
         return
     fi
 
     if [ -z "$base" ] || [ -z "$under" ]; then
         RES_STATUS=skip
-        RES_SUMMARY="(ping не дал результат)"
+        RES_SUMMARY="(ping gave no result)"
         return
     fi
 
     local delta
     delta=$(echo "scale=0; ($under - $base) / 1" | bc -l 2>/dev/null)
 
-    # Аккуратный знак (избегаем "+-31 ms")
+    # Tidy sign (avoid "+-31 ms")
     local sign
     if [ "${delta:0:1}" = "-" ]; then
-        sign=""   # минус уже в значении
+        sign=""   # the minus is already in the value
     elif [ "${delta:-0}" -gt 0 ] 2>/dev/null; then
         sign="+"
     else
@@ -984,26 +984,26 @@ check_bufferbloat() {
     RES_STATUS=ok
     RES_SUMMARY="${sign}${delta} ms"
 
-    # Отрицательная дельта (под нагрузкой ниже baseline) = странность сети, не bufferbloat
+    # Negative delta (under load below baseline) = network weirdness, not bufferbloat
     if [ "${delta:0:1}" = "-" ]; then
-        RES_SUMMARY="${delta} ms (странно: ping упал под нагрузкой)"
-        finding 1 bufferbloat "Под нагрузкой ping ниже baseline — нестабильная сеть, baseline захватил случайный спайк"
+        RES_SUMMARY="${delta} ms (odd: ping dropped under load)"
+        finding 1 bufferbloat "Under load ping is below baseline — unstable network, the baseline caught a random spike"
         return
     fi
 
     if have bc && (( $(echo "$delta > 100" | bc -l) )); then
         RES_STATUS=bad
-        finding 3 bufferbloat "Bufferbloat +${delta} ms — катастрофа, шортсы будут постоянно фризить. Лечится qdisc=cake/fq_codel"
+        finding 3 bufferbloat "Bufferbloat +${delta} ms — disaster, Shorts will freeze constantly. Fixed by qdisc=cake/fq_codel"
     elif have bc && (( $(echo "$delta > 50" | bc -l) )); then
         RES_STATUS=bad
-        finding 3 bufferbloat "Bufferbloat +${delta} ms — большой. Включи qdisc cake"
+        finding 3 bufferbloat "Bufferbloat +${delta} ms — large. Enable qdisc cake"
     elif have bc && (( $(echo "$delta > 20" | bc -l) )); then
         RES_STATUS=warn
-        finding 2 bufferbloat "Bufferbloat +${delta} ms — заметный, на грани"
+        finding 2 bufferbloat "Bufferbloat +${delta} ms — noticeable, borderline"
     fi
 }
 
-# 16. Sustained variance — детект троттлинга
+# 16. Sustained variance — throttling detection
 check_variance() {
     local samples=()
     local fails=0
@@ -1025,16 +1025,16 @@ check_variance() {
     done
 
     if [ "$fails" -ge 5 ]; then
-        # Все упали — скорее проблема канала/блокировки cachefly, не нестабильность
+        # All failed — more likely a link/Cachefly-block issue than instability
         RES_STATUS=warn
         RES_SUMMARY="5/5 fail"
-        finding 2 variance "Все 5 заборов Cachefly упали — Cachefly блокируется этим ASN или канал крайне нестабилен (проверь раздел CDN — если только Cachefly fail, это не катастрофа)"
+        finding 2 variance "All 5 Cachefly pulls failed — Cachefly is blocked by this ASN or the link is extremely unstable (check the CDN section — if only Cachefly fails, it's not a disaster)"
         summary_kv "Variance (5x)" "5 fails"
         return
     elif [ "$fails" -ge 3 ]; then
         RES_STATUS=bad
         RES_SUMMARY="$fails/5 fail"
-        finding 3 variance "$fails/5 заборов фейл — канал/маршрут крайне нестабильный"
+        finding 3 variance "$fails/5 pulls failed — the link/route is extremely unstable"
         summary_kv "Variance (5x)" "$fails fails"
         return
     fi
@@ -1055,22 +1055,22 @@ check_variance() {
     RES_SUMMARY="${min}–${max} Mbit/s"
     if have bc && (( $(echo "$ratio > 3" | bc -l) )); then
         RES_STATUS=bad
-        finding 3 variance "Разброс x${ratio} — Google троттлит ASN или PoP-роутинг нестабилен"
+        finding 3 variance "Spread x${ratio} — Google is throttling the ASN or PoP routing is unstable"
     elif have bc && (( $(echo "$ratio > 2" | bc -l) )); then
         RES_STATUS=warn
-        finding 2 variance "Разброс x${ratio} — нестабильный канал"
+        finding 2 variance "Spread x${ratio} — unstable link"
     fi
 }
 
 # 17. TCP retransmissions
 check_tcp_stats() {
-    # Диагностический дамп (не используем для счёта — `nstat -r` обнуляет кеш)
+    # Diagnostic dump (not used for counting — `nstat -r` resets the cache)
     have nstat && nstat -rsz 2>/dev/null \
         | grep -iE 'TcpRetrans|TcpExt.*Retrans|TcpAttemptFails|ListenDrops|TCPBacklogDrop|OutOfOrder' \
         | head -20
 
-    # Абсолютные счётчики читаем напрямую из /proc/net/snmp.
-    # Tcp-строка: # столбцы 11=InSegs 12=OutSegs 13=RetransSegs (см. RFC2012/MIB-II).
+    # Read absolute counters directly from /proc/net/snmp.
+    # Tcp line: columns 11=InSegs 12=OutSegs 13=RetransSegs (see RFC2012/MIB-II).
     local seg out_seg retrans pct=0
     if [ -r /proc/net/snmp ]; then
         local snmp_vals
@@ -1086,7 +1086,7 @@ check_tcp_stats() {
 
     if [ -z "${seg:-}" ]; then
         RES_STATUS=skip
-        RES_SUMMARY="(не удалось прочитать /proc/net/snmp)"
+        RES_SUMMARY="(couldn't read /proc/net/snmp)"
         return
     fi
 
@@ -1096,23 +1096,23 @@ check_tcp_stats() {
     RES_SUMMARY="${pct}% retrans"
     if have bc && (( $(echo "$pct > 5" | bc -l 2>/dev/null || echo 0) )); then
         RES_STATUS=bad
-        finding 3 retrans "TCP retrans ${pct}% — очень много, явные потери на маршруте"
+        finding 3 retrans "TCP retrans ${pct}% — very high, clear loss on the route"
     elif have bc && (( $(echo "$pct > 2" | bc -l 2>/dev/null || echo 0) )); then
         RES_STATUS=warn
-        finding 2 retrans "TCP retrans ${pct}% — заметные потери на пути"
+        finding 2 retrans "TCP retrans ${pct}% — noticeable loss on the path"
     fi
 }
 
-# 18. IPv6 готовность
+# 18. IPv6 readiness
 check_ipv6() {
     local v6_route v6_ext v6_ping
     v6_route=$(ip -6 route show default 2>/dev/null | head -1)
     v6_ext=$(curl --connect-timeout 5 -6 -sS --max-time 5 https://api64.ipify.org 2>/dev/null || echo "")
     if [ -z "$v6_ext" ]; then
         RES_STATUS=warn
-        RES_SUMMARY="нет IPv6"
-        finding 1 ipv6 "IPv6 не настроен. Google отдаёт PoP по v6 быстрее → клиент попадает на медленный v4"
-        summary_kv "IPv6" "нет"
+        RES_SUMMARY="no IPv6"
+        finding 1 ipv6 "IPv6 isn't configured. Google serves a faster PoP over v6 → the client lands on slow v4"
+        summary_kv "IPv6" "none"
         return
     fi
     v6_ping=$(ping -6 -c 4 -W 2 -q ipv6.google.com 2>/dev/null | awk -F'/' '/rtt|round-trip/ {printf "%.0f", $5}')
@@ -1123,7 +1123,7 @@ check_ipv6() {
     RES_SUMMARY="$v6_ext · ${v6_ping:-?}ms"
 }
 
-# 19. Reachability популярных сервисов (TTFB + HTTP-код)
+# 19. Reachability of popular services (TTFB + HTTP code)
 check_services() {
     local SERVICES=(
         "YouTube|https://www.youtube.com/"
@@ -1188,32 +1188,32 @@ check_services() {
         esac
     done
 
-    summary_kv "Сервисы" "$ok_count/$total ok · $blocked blocked · $fails fail"
+    summary_kv "Services" "$ok_count/$total ok · $blocked blocked · $fails fail"
 
     if [ "$fails" -ge 3 ]; then
         RES_STATUS=bad
         RES_SUMMARY="$ok_count/$total · ${fails} unreachable"
-        finding 3 services "Недоступны:$failed_list — серьёзная сетевая проблема или DNS"
+        finding 3 services "Unreachable:$failed_list — serious network problem or DNS"
     elif [ "$blocked" -ge 3 ]; then
         RES_STATUS=warn
         RES_SUMMARY="$ok_count/$total · ${blocked} blocked"
-        finding 2 services "Сервисы блокируют IP:$blocked_list — IP в datacenter blacklist'ах"
+        finding 2 services "Services are blocking the IP:$blocked_list — IP on datacenter blacklists"
     elif [ "$fails" -gt 0 ] || [ "$blocked" -gt 0 ]; then
         RES_STATUS=warn
         RES_SUMMARY="$ok_count/$total · $((fails+blocked)) issues"
-        [ -n "$failed_list" ]  && finding 2 services "Недоступны:$failed_list"
-        [ -n "$blocked_list" ] && finding 2 services "Заблокировали IP:$blocked_list"
+        [ -n "$failed_list" ]  && finding 2 services "Unreachable:$failed_list"
+        [ -n "$blocked_list" ] && finding 2 services "Blocked the IP:$blocked_list"
     elif [ "$slow" -ge 3 ]; then
         RES_STATUS=warn
         RES_SUMMARY="$ok_count/$total · ${slow} slow"
-        finding 1 services "Медленный TTFB:$slow_list (>2s) — возможно плохой пиринг или CDN-маршрут"
+        finding 1 services "Slow TTFB:$slow_list (>2s) — possibly bad peering or CDN route"
     else
         RES_STATUS=ok
         RES_SUMMARY="$ok_count/$total reachable"
     fi
 }
 
-# 20. Скорость через несколько CDN (детект ASN-троттлинга)
+# 20. Speed across multiple CDNs (ASN throttling detection)
 check_cdn_multi() {
     local CDNS=(
         "Cloudflare|https://speed.cloudflare.com/__down?bytes=20000000"
@@ -1236,7 +1236,7 @@ check_cdn_multi() {
             -w "%{speed_download}|%{http_code}" "$url" 2>/dev/null) || out="0|000"
         spd=${out%%|*}
         code=${out##*|}
-        # curl возвращает "0.000" при таймауте/ошибке — нормализуем к целому
+        # curl returns "0.000" on timeout/error — normalize to an integer
         local spd_int
         spd_int=$(printf '%.0f' "${spd:-0}" 2>/dev/null || echo 0)
         if [ "${spd_int:-0}" -lt 10000 ] || [ "$code" != "200" ]; then
@@ -1256,8 +1256,8 @@ check_cdn_multi() {
 
     if [ "$ok" -eq 0 ]; then
         RES_STATUS=bad
-        RES_SUMMARY="все CDN fail"
-        finding 3 cdn "Ни один CDN не отвечает — серьёзная блокировка/потеря маршрута"
+        RES_SUMMARY="all CDNs fail"
+        finding 3 cdn "No CDN responds — serious block/route loss"
         return
     fi
 
@@ -1268,29 +1268,29 @@ check_cdn_multi() {
     RES_SUMMARY="avg ${avg} Mbit/s · range ${slowest}–${fastest}"
     if [ "$avg" -lt 50 ]; then
         RES_STATUS=bad
-        finding 3 cdn "Средняя скорость по CDN ${avg} Mbit/s — канал/пиринг битый"
+        finding 3 cdn "Average CDN speed ${avg} Mbit/s — link/peering is broken"
     elif [ "$avg" -lt 200 ]; then
         RES_STATUS=warn
-        finding 2 cdn "CDN avg ${avg} Mbit/s — небыстро для VPN-ноды"
+        finding 2 cdn "CDN avg ${avg} Mbit/s — not fast for a VPN node"
     fi
 
-    # Огромный разброс (одни CDN летят, другие тонут) = разная маршрутизация
+    # Huge spread (some CDNs fly, others sink) = different routing
     if [ "$fastest" -gt 0 ] && [ "$slowest" -gt 0 ]; then
         local ratio=$((fastest / slowest))
         if [ "$ratio" -ge 5 ]; then
-            finding 2 cdn "Разброс x${ratio} между CDN ($slowest_name=$slowest, $fastest_name=$fastest Mbit/s) — значит пиринг разный, какие-то ASN режутся"
+            finding 2 cdn "Spread x${ratio} between CDNs ($slowest_name=$slowest, $fastest_name=$fastest Mbit/s) — peering differs, some ASNs are being throttled"
         fi
     fi
 }
 
-# 21. IP-репутация и видимость снаружи
+# 21. IP reputation and external visibility
 check_ip_rep() {
     local trace cf_ip cf_loc cf_colo cf_warp cf_h
     trace=$(curl --connect-timeout 5 -sS --max-time 5 https://www.cloudflare.com/cdn-cgi/trace 2>/dev/null)
     if [ -z "$trace" ]; then
         RES_STATUS=warn
-        RES_SUMMARY="Cloudflare trace недоступен"
-        finding 1 reputation "Не удалось получить /cdn-cgi/trace — Cloudflare не отвечает"
+        RES_SUMMARY="Cloudflare trace unavailable"
+        finding 1 reputation "Couldn't fetch /cdn-cgi/trace — Cloudflare not responding"
         return
     fi
     cf_ip=$(echo "$trace"   | awk -F= '/^ip=/   {print $2}')
@@ -1301,7 +1301,7 @@ check_ip_rep() {
 
     echo "Cloudflare trace: ip=$cf_ip loc=$cf_loc colo=$cf_colo warp=$cf_warp h=$cf_h"
 
-    # ipapi.co — у них есть поле privacy.hosting / asn.type
+    # ipapi.co — they have a privacy.hosting / asn.type field
     local ipinfo=""
     if have jq; then
         ipinfo=$(curl --connect-timeout 5 -sS --max-time 5 "https://ipapi.co/$cf_ip/json/" 2>/dev/null)
@@ -1314,7 +1314,7 @@ check_ip_rep() {
         echo "ipapi: org=$org country=$country city=$city"
     fi
 
-    # Тест Google CAPTCHA: если IP помечен как абуз — Google вернёт 429 или /sorry/
+    # Google CAPTCHA test: if the IP is flagged as abusive — Google returns 429 or /sorry/
     local g_test
     g_test=$(curl "${CURL_FLAGS[@]}" -sS -L -o /dev/null --max-time 5 \
         -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36" \
@@ -1329,8 +1329,8 @@ check_ip_rep() {
         captcha_hit=1
     fi
 
-    # Reverse-DNS — если PTR содержит "hosting"/"vps"/"server"/"datacenter" — почти точно дата-центр
-    # Сначала пробуем системный DNS, при фейле — fallback на 1.1.1.1 (дефолтный DNS ноды может быть кривым)
+    # Reverse DNS — if the PTR contains "hosting"/"vps"/"server"/"datacenter" — almost certainly a datacenter
+    # First try the system DNS, on failure fall back to 1.1.1.1 (the node's default DNS may be broken)
     local ptr=""
     if have dig && [ -n "$cf_ip" ]; then
         ptr=$(dig +short +time=2 +tries=1 -x "$cf_ip" 2>/dev/null \
@@ -1339,38 +1339,38 @@ check_ip_rep() {
             ptr=$(dig @1.1.1.1 +short +time=2 +tries=1 -x "$cf_ip" 2>/dev/null \
                 | grep -vE '^;;|^$' | head -1)
         fi
-        echo "PTR: ${ptr:-нет}"
+        echo "PTR: ${ptr:-none}"
     fi
 
     summary_kv "Cloudflare colo" "$cf_colo / $cf_loc"
-    summary_kv "Reverse DNS" "${ptr:-нет}"
-    [ -z "$ptr" ] && finding 1 reputation "Reverse DNS не резолвится — DNS на ноде сломан или у IP нет PTR"
+    summary_kv "Reverse DNS" "${ptr:-none}"
+    [ -z "$ptr" ] && finding 1 reputation "Reverse DNS doesn't resolve — DNS on the node is broken or the IP has no PTR"
 
     RES_STATUS=ok
     RES_SUMMARY="cf=$cf_colo/$cf_loc"
 
     if [ "$captcha_hit" = "1" ]; then
         RES_STATUS=bad
-        RES_SUMMARY="$RES_SUMMARY · Google показывает CAPTCHA"
-        finding 3 reputation "Google делает редирект на /sorry — IP в abuse-листах. Юзеры будут видеть капчу"
+        RES_SUMMARY="$RES_SUMMARY · Google shows CAPTCHA"
+        finding 3 reputation "Google redirects to /sorry — IP is on abuse lists. Users will see a captcha"
     fi
 
-    # Эвристика "это датацентр?"
+    # "Is this a datacenter?" heuristic
     local dc=0
     if echo "$org $ptr" | grep -qiE 'hosting|datacenter|data.center|vps|server|cloud|colo|dedicated'; then
         dc=1
     fi
     if [ "$dc" = "1" ]; then
-        finding 1 reputation "IP выглядит как датацентр (org/ptr содержит hosting/vps) — Netflix/Disney+/банкинг могут блокировать"
+        finding 1 reputation "IP looks like a datacenter (org/ptr contains hosting/vps) — Netflix/Disney+/banking may block it"
     fi
 }
 
 # 22. Xray / Remnanode
 check_xray() {
-    if ! have docker; then RES_STATUS=skip; RES_SUMMARY="docker не найден"; return; fi
+    if ! have docker; then RES_STATUS=skip; RES_SUMMARY="docker not found"; return; fi
     local cont
     cont=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -E 'remnanode|xray|x-ui|sing-box' | head -1)
-    if [ -z "$cont" ]; then RES_STATUS=skip; RES_SUMMARY="контейнер не найден"; return; fi
+    if [ -z "$cont" ]; then RES_STATUS=skip; RES_SUMMARY="container not found"; return; fi
 
     local ver stats restarts
     ver=$(docker exec "$cont" /usr/local/bin/xray -version 2>/dev/null | head -1 | awk '{print $2}')
@@ -1379,7 +1379,7 @@ check_xray() {
     echo "container=$cont version=$ver"
     echo "stats=$stats"
     echo "restarts=$restarts"
-    docker logs --tail 500 "$cont" 2>&1 | grep -iE 'error|fail|timeout|refused' | tail -5 || echo "(нет ошибок в логах)"
+    docker logs --tail 500 "$cont" 2>&1 | grep -iE 'error|fail|timeout|refused' | tail -5 || echo "(no errors in logs)"
 
     summary_kv "Xray" "$cont · v$ver · restarts $restarts"
 
@@ -1387,12 +1387,12 @@ check_xray() {
     RES_SUMMARY="v${ver:-?} · $(echo "$stats" | cut -d'|' -f1) cpu"
     if [ "${restarts:-0}" -gt 5 ]; then
         RES_STATUS=warn
-        finding 2 xray "Xray-контейнер рестартил $restarts раз — нестабилен"
+        finding 2 xray "Xray container restarted $restarts times — unstable"
     fi
 }
 
 # ════════════════════════════════════════════════════════════════════
-# ФИКСЫ — применение исправлений
+# FIXES — applying corrections
 # ════════════════════════════════════════════════════════════════════
 
 run_or_dry() {
@@ -1403,7 +1403,7 @@ run_or_dry() {
     eval "$@"
 }
 
-# Универсальный «откат» — собираем список изменений в файл-журнал
+# Universal "rollback" — collect the list of changes into a journal file
 FIX_LOG="/etc/node-diagnostic.applied"
 record_fix() {
     [ "$DRY_RUN" = "1" ] && return
@@ -1412,7 +1412,7 @@ record_fix() {
     }
 }
 
-# Бэкап текущих настроек перед фиксом — в /var/backups/node-diagnostic/
+# Back up current settings before the fix — into /var/backups/node-diagnostic/
 BACKUP_DIR="/var/backups/node-diagnostic"
 BACKUP_DONE=0
 backup_settings() {
@@ -1424,7 +1424,7 @@ backup_settings() {
     sysctl -a 2>/dev/null > "$BACKUP_DIR/sysctl-$ts.txt"
     have iptables-save && iptables-save > "$BACKUP_DIR/iptables-$ts.rules" 2>/dev/null
     have ip6tables-save && ip6tables-save > "$BACKUP_DIR/ip6tables-$ts.rules" 2>/dev/null
-    echo -e "    ${DIM}backup: $BACKUP_DIR/*-$ts.* — для отката${NC}"
+    echo -e "    ${DIM}backup: $BACKUP_DIR/*-$ts.* — for rollback${NC}"
     BACKUP_DONE=1
     BACKUP_TS=$ts
     record_fix "backup snapshot $ts"
@@ -1433,13 +1433,13 @@ backup_settings() {
 fix_sysctl() {
     backup_settings
     local target=/etc/sysctl.d/99-vpn-tuning.conf
-    echo "  → пишу $target"
+    echo "  → writing $target"
     if [ "$DRY_RUN" = "1" ]; then
-        echo -e "    ${DIM}[dry-run]${NC} (создал бы файл с BBR/cake/буферами/conntrack)"
+        echo -e "    ${DIM}[dry-run]${NC} (would create a file with BBR/cake/buffers/conntrack)"
     else
         cat > "$target" <<'SYSCTL_EOF'
 # Generated by node-diagnostic.sh
-# Конджестион + qdisc
+# Congestion + qdisc
 net.core.default_qdisc = cake
 net.ipv4.tcp_congestion_control = bbr
 # PMTU & idle
@@ -1447,12 +1447,12 @@ net.ipv4.tcp_mtu_probing = 1
 net.ipv4.tcp_slow_start_after_idle = 0
 net.ipv4.tcp_notsent_lowat = 131072
 net.ipv4.tcp_fastopen = 3
-# Буферы
+# Buffers
 net.core.rmem_max = 67108864
 net.core.wmem_max = 67108864
 net.ipv4.tcp_rmem = 4096 87380 67108864
 net.ipv4.tcp_wmem = 4096 65536 67108864
-# Очереди
+# Queues
 net.core.netdev_max_backlog = 16384
 net.core.somaxconn = 8192
 net.ipv4.tcp_max_syn_backlog = 8192
@@ -1460,8 +1460,8 @@ net.ipv4.tcp_max_syn_backlog = 8192
 net.netfilter.nf_conntrack_max = 524288
 SYSCTL_EOF
         sysctl --system >/dev/null 2>&1 && \
-            echo -e "    ${G}✓${NC} sysctl --system применил" || \
-            echo -e "    ${R}✗${NC} sysctl --system вернул ошибку"
+            echo -e "    ${G}✓${NC} sysctl --system applied" || \
+            echo -e "    ${R}✗${NC} sysctl --system returned an error"
         record_fix "sysctl tuning ($target)"
     fi
 }
@@ -1469,10 +1469,10 @@ SYSCTL_EOF
 fix_mss_clamp() {
     backup_settings
     local rule_args=(-p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu)
-    echo "  → добавляю iptables MSS clamp в FORWARD/OUTPUT"
+    echo "  → adding iptables MSS clamp to FORWARD/OUTPUT"
     for chain in FORWARD OUTPUT; do
         if iptables -t mangle -C "$chain" "${rule_args[@]}" 2>/dev/null; then
-            echo -e "    ${DIM}правило в $chain уже есть${NC}"
+            echo -e "    ${DIM}rule already present in $chain${NC}"
         else
             run_or_dry "iptables -t mangle -A $chain ${rule_args[*]}" \
                 && echo -e "    ${G}✓${NC} $chain"
@@ -1485,9 +1485,9 @@ fix_mss_clamp() {
                 echo -e "    ${G}✓${NC} netfilter-persistent save"
         elif [ -d /etc/iptables ] && have iptables-save; then
             iptables-save > /etc/iptables/rules.v4 && \
-                echo -e "    ${G}✓${NC} сохранил в /etc/iptables/rules.v4"
+                echo -e "    ${G}✓${NC} saved to /etc/iptables/rules.v4"
         else
-            echo -e "    ${Y}⚠${NC} нет netfilter-persistent — правила НЕ переживут перезагрузку. Установить: apt install iptables-persistent"
+            echo -e "    ${Y}⚠${NC} no netfilter-persistent — rules will NOT survive a reboot. Install: apt install iptables-persistent"
         fi
         record_fix "iptables MSS clamp (FORWARD+OUTPUT)"
     fi
@@ -1495,12 +1495,12 @@ fix_mss_clamp() {
 
 fix_rps() {
     local iface=$1
-    [ -z "$iface" ] && { echo "  ${R}✗${NC} интерфейс не определён"; return 1; }
+    [ -z "$iface" ] && { echo "  ${R}✗${NC} interface not determined"; return 1; }
     local n=$(nproc)
-    # маска: все CPU
+    # mask: all CPUs
     local mask
     mask=$(printf '%x' $(( (1 << n) - 1 )))
-    echo "  → RPS mask=$mask на $iface"
+    echo "  → RPS mask=$mask on $iface"
     local applied=0
     for q in /sys/class/net/"$iface"/queues/rx-*; do
         [ -d "$q" ] || continue
@@ -1510,9 +1510,9 @@ fix_rps() {
             echo "$mask" > "$q/rps_cpus" 2>/dev/null && applied=$((applied+1))
         fi
     done
-    [ "$DRY_RUN" = "0" ] && echo -e "    ${G}✓${NC} применено к $applied очередям"
+    [ "$DRY_RUN" = "0" ] && echo -e "    ${G}✓${NC} applied to $applied queues"
 
-    # systemd unit для постоянства
+    # systemd unit for persistence
     if [ "$DRY_RUN" = "0" ]; then
         cat > /etc/systemd/system/vpn-rps.service <<UNIT
 [Unit]
@@ -1529,30 +1529,30 @@ WantedBy=multi-user.target
 UNIT
         systemctl daemon-reload
         systemctl enable --now vpn-rps.service >/dev/null 2>&1 && \
-            echo -e "    ${G}✓${NC} systemd unit vpn-rps.service создан и enabled"
-        record_fix "RPS mask=$mask на $iface (vpn-rps.service)"
+            echo -e "    ${G}✓${NC} systemd unit vpn-rps.service created and enabled"
+        record_fix "RPS mask=$mask on $iface (vpn-rps.service)"
     fi
 }
 
 fix_ring_buffers() {
     local iface=$1
-    have ethtool || { echo "  ${R}✗${NC} ethtool не установлен"; return; }
+    have ethtool || { echo "  ${R}✗${NC} ethtool not installed"; return; }
     local max_rx max_tx cur_rx cur_tx
     max_rx=$(ethtool -g "$iface" 2>/dev/null | awk '/Pre-set maximums/,/Current/' | awk '/RX:/ {print $2; exit}')
     max_tx=$(ethtool -g "$iface" 2>/dev/null | awk '/Pre-set maximums/,/Current/' | awk '/TX:/ {print $2; exit}')
     cur_rx=$(ethtool -g "$iface" 2>/dev/null | awk '/Current hardware settings/,0' | awk '/RX:/ {print $2; exit}')
     cur_tx=$(ethtool -g "$iface" 2>/dev/null | awk '/Current hardware settings/,0' | awk '/TX:/ {print $2; exit}')
-    echo "  → ring buffers: max RX=$max_rx TX=$max_tx (текущие $cur_rx/$cur_tx)"
+    echo "  → ring buffers: max RX=$max_rx TX=$max_tx (current $cur_rx/$cur_tx)"
     if [ -z "$max_rx" ] || [ "$max_rx" = "0" ]; then
-        echo -e "    ${Y}⚠${NC} NIC не поддерживает изменение ring buffers (часто virtio_net)"
+        echo -e "    ${Y}⚠${NC} NIC doesn't support changing ring buffers (often virtio_net)"
         return
     fi
     if [ "$cur_rx" = "$max_rx" ] && [ "$cur_tx" = "$max_tx" ]; then
-        echo -e "    ${DIM}уже на максимуме${NC}"
+        echo -e "    ${DIM}already at maximum${NC}"
         return
     fi
     run_or_dry "ethtool -G $iface rx $max_rx tx $max_tx" && \
-        echo -e "    ${G}✓${NC} применено"
+        echo -e "    ${G}✓${NC} applied"
     if [ "$DRY_RUN" = "0" ]; then
         cat > /etc/systemd/system/vpn-ring.service <<UNIT
 [Unit]
@@ -1569,8 +1569,8 @@ WantedBy=multi-user.target
 UNIT
         systemctl daemon-reload
         systemctl enable --now vpn-ring.service >/dev/null 2>&1 && \
-            echo -e "    ${G}✓${NC} systemd unit vpn-ring.service создан и enabled"
-        record_fix "ring buffers RX=$max_rx TX=$max_tx на $iface (vpn-ring.service)"
+            echo -e "    ${G}✓${NC} systemd unit vpn-ring.service created and enabled"
+        record_fix "ring buffers RX=$max_rx TX=$max_tx on $iface (vpn-ring.service)"
     fi
 }
 
@@ -1579,22 +1579,22 @@ fix_swappiness() {
     if [ "$DRY_RUN" = "0" ]; then
         echo "vm.swappiness = 10" > /etc/sysctl.d/98-swappiness.conf
         sysctl -p /etc/sysctl.d/98-swappiness.conf >/dev/null 2>&1 && \
-            echo -e "    ${G}✓${NC} применено"
+            echo -e "    ${G}✓${NC} applied"
         record_fix "vm.swappiness=10"
     fi
 }
 
-# Выбор и применение фиксов
+# Select and apply fixes
 prompt_and_apply_fixes() {
     [ "$APPLY_MODE" = "none" ] && return
     if [ "$EUID" -ne 0 ]; then
         echo
-        echo -e "${DIM}  Для применения фиксов нужны root. Перезапусти под sudo.${NC}"
+        echo -e "${DIM}  Applying fixes requires root. Re-run under sudo.${NC}"
         return
     fi
 
-    # Определяем какие фиксы релевантны на основе FINDINGS
-    declare -a FIXES=()    # формат: "key|короткое описание|что лечит"
+    # Determine which fixes are relevant based on FINDINGS
+    declare -a FIXES=()    # format: "key|short description|what it fixes"
     local f_sysctl=0 f_mss=0 f_rps=0 f_ring=0
 
     while IFS='|' read -r sev tag msg; do
@@ -1608,25 +1608,25 @@ prompt_and_apply_fixes() {
         esac
     done < "$FINDINGS_FILE"
 
-    # формат: key|метка|impact-stars|описание
-    [ "$f_sysctl" = "1" ] && FIXES+=("sysctl|sysctl tuning|★★★|BBR + cake + буферы + tcp_mtu_probing + conntrack")
-    [ "$f_mss"    = "1" ] && FIXES+=("mss|MSS clamp|★★★|iptables TCPMSS — большие чанки не упираются в Frag-needed")
-    [ "$f_rps"    = "1" ] && FIXES+=("rps|RPS на $DEFAULT_IFACE|★★|размазать softirq по всем CPU (балансировка прерываний)")
-    [ "$f_ring"   = "1" ] && FIXES+=("ring|NIC ring buffers|★★|поднять RX/TX до максимума для меньших дропов")
+    # format: key|label|impact-stars|description
+    [ "$f_sysctl" = "1" ] && FIXES+=("sysctl|sysctl tuning|★★★|BBR + cake + buffers + tcp_mtu_probing + conntrack")
+    [ "$f_mss"    = "1" ] && FIXES+=("mss|MSS clamp|★★★|iptables TCPMSS — large chunks don't hit Frag-needed")
+    [ "$f_rps"    = "1" ] && FIXES+=("rps|RPS on $DEFAULT_IFACE|★★|spread softirq across all CPUs (interrupt balancing)")
+    [ "$f_ring"   = "1" ] && FIXES+=("ring|NIC ring buffers|★★|raise RX/TX to maximum for fewer drops")
 
     if [ ${#FIXES[@]} -eq 0 ]; then
         echo
-        echo -e "${DIM}  ─────────────────────────────────  ФИКСЫ  ─────────────────────────────────${NC}"
+        echo -e "${DIM}  ─────────────────────────────────  FIXES  ─────────────────────────────────${NC}"
         echo
-        echo -e "  ${G}${BOLD}✓ Релевантных фиксов нет${NC} ${DIM}— нода уже настроена оптимально${NC}"
+        echo -e "  ${G}${BOLD}✓ No relevant fixes${NC} ${DIM}— the node is already optimally configured${NC}"
         echo
         return
     fi
 
     echo
-    echo -e "${DIM}  ─────────────────────────────────  ФИКСЫ  ─────────────────────────────────${NC}"
+    echo -e "${DIM}  ─────────────────────────────────  FIXES  ─────────────────────────────────${NC}"
     echo
-    echo -e "  ${BOLD}Доступно ${#FIXES[@]} ${NC}${DIM}рекомендованных исправлений${NC} ${DIM}(★ = ожидаемый импакт)${NC}"
+    echo -e "  ${BOLD}${#FIXES[@]} ${NC}${DIM}recommended fixes available${NC} ${DIM}(★ = expected impact)${NC}"
     echo
     for i in "${!FIXES[@]}"; do
         local entry=${FIXES[$i]}
@@ -1641,17 +1641,17 @@ prompt_and_apply_fixes() {
             $((i+1)) "$label" "$pad" "" "$stars" "$desc"
     done
     echo
-    echo -e "    ${DIM}Перед применением будет создан backup настроек в $BACKUP_DIR${NC}"
+    echo -e "    ${DIM}Before applying, a settings backup will be created in $BACKUP_DIR${NC}"
     echo
 
     local answer="all"
     if [ "$APPLY_MODE" = "prompt" ]; then
         if [ ! -t 0 ]; then
-            echo -e "${DIM}  (не TTY — запусти с -a для авто-применения)${NC}"
+            echo -e "${DIM}  (not a TTY — run with -a for auto-apply)${NC}"
             echo
             return
         fi
-        printf "  ${BOLD}Применить?${NC} ${DIM}[номера через запятую / all / none]${NC} ${BOLD}[none]${NC}: "
+        printf "  ${BOLD}Apply?${NC} ${DIM}[comma-separated numbers / all / none]${NC} ${BOLD}[none]${NC}: "
         read -r answer
         answer=${answer,,}
         [ -z "$answer" ] && answer="none"
@@ -1659,7 +1659,7 @@ prompt_and_apply_fixes() {
 
     if [ "$answer" = "none" ]; then
         echo
-        echo -e "  ${DIM}Пропущено — ничего не применено${NC}"
+        echo -e "  ${DIM}Skipped — nothing applied${NC}"
         echo
         return
     fi
@@ -1680,14 +1680,14 @@ prompt_and_apply_fixes() {
     fi
     if [ ${#TO_APPLY[@]} -eq 0 ]; then
         echo
-        echo -e "  ${Y}ничего не выбрано${NC}"
+        echo -e "  ${Y}nothing selected${NC}"
         echo
         return
     fi
 
     echo
     if [ "$DRY_RUN" = "1" ]; then
-        echo -e "  ${Y}${BOLD}▶ DRY-RUN${NC} ${DIM}— показываю команды, не применяю${NC}"
+        echo -e "  ${Y}${BOLD}▶ DRY-RUN${NC} ${DIM}— showing commands, not applying${NC}"
         echo
     fi
     local applied_n=0
@@ -1706,13 +1706,13 @@ prompt_and_apply_fixes() {
         echo
     done
 
-    echo -e "  ${G}${BOLD}┃${NC}  ${G}${BOLD}✓ Готово${NC} ${DIM}—${NC} применил ${BOLD}${applied_n}${NC} ${DIM}фикс(ов)${NC}"
-    echo -e "  ${G}${BOLD}┃${NC}  ${DIM}Перепроверить эффект:${NC} ${BOLD}sudo bash $0 -q${NC}"
+    echo -e "  ${G}${BOLD}┃${NC}  ${G}${BOLD}✓ Done${NC} ${DIM}—${NC} applied ${BOLD}${applied_n}${NC} ${DIM}fix(es)${NC}"
+    echo -e "  ${G}${BOLD}┃${NC}  ${DIM}Re-check the effect:${NC} ${BOLD}sudo bash $0 -q${NC}"
     echo
 }
 
 # ════════════════════════════════════════════════════════════════════
-# ГЛАВНАЯ ЧАСТЬ
+# MAIN PART
 # ════════════════════════════════════════════════════════════════════
 
 # Header
@@ -1722,35 +1722,35 @@ echo -e "  ${DIM}─────────────────────
 echo -e "  ${DIM}$(date -u +'%Y-%m-%d %H:%M UTC') · $(hostname)${NC}"
 echo
 
-echo -ne "  ${DIM}Ставлю недостающие пакеты…${NC}"
+echo -ne "  ${DIM}Installing missing packages…${NC}"
 ensure_deps >>"$LOG" 2>&1
-echo -e "\r${CLR_LINE}  ${DIM}Лог: $LOG${NC}"
+echo -e "\r${CLR_LINE}  ${DIM}Log: $LOG${NC}"
 echo
 
-# Глобальные значения для фиксов (нужны вне subshell'ов)
+# Global values for fixes (needed outside the subshells)
 DEFAULT_IFACE=$(ip -4 route show default | awk '/default/ {print $5; exit}')
 export DEFAULT_IFACE
 
-# Регистрируем чек-лист
+# Register the checklist
 CHECKS=(
-    "Идентификация:check_identify"
-    "CPU и нагрузка:check_cpu"
-    "Память:check_mem"
-    "NIC / интерфейс:check_nic"
-    "Туннели:check_tunnel"
+    "Identification:check_identify"
+    "CPU and load:check_cpu"
+    "Memory:check_mem"
+    "NIC / interface:check_nic"
+    "Tunnels:check_tunnel"
     "TCP congestion:check_tcp_cc"
     "TCP tuning:check_tcp_tuning"
     "Conntrack:check_conntrack"
-    "DNS-резолв:check_dns"
+    "DNS resolution:check_dns"
     "PMTU:check_pmtu"
-    "Loss до Google:check_loss"
-    "Маршрут (mtr):check_mtr"
+    "Loss to Google:check_loss"
+    "Route (mtr):check_mtr"
     "QUIC / HTTP-3:check_quic"
     "Speed: 1-flow:check_speed_single"
     "Speed: 4-flow:check_speed_4flow"
-    "CDN мульти-тест:check_cdn_multi"
-    "Сервисы reach:check_services"
-    "IP-репутация:check_ip_rep"
+    "CDN multi-test:check_cdn_multi"
+    "Services reach:check_services"
+    "IP reputation:check_ip_rep"
     "Bufferbloat:check_bufferbloat"
     "Sustained variance:check_variance"
     "TCP retransmits:check_tcp_stats"
@@ -1758,12 +1758,12 @@ CHECKS=(
     "Xray:check_xray"
 )
 
-# Долгие тесты — пропускаем в --quick режиме (~1 мин вместо ~5)
+# Long tests — skipped in --quick mode (~1 min instead of ~5)
 SLOW_CHECKS="check_mtr check_speed_4flow check_cdn_multi check_services check_bufferbloat check_variance"
-# Сетевые тесты — пропускаем в --no-net (для офлайн-аудита локальной конфигурации)
+# Network tests — skipped in --no-net (for offline audit of local configuration)
 NET_CHECKS="check_loss check_mtr check_quic check_speed_single check_speed_4flow check_cdn_multi check_services check_ip_rep check_bufferbloat check_variance check_ipv6 check_dns check_pmtu"
 
-# Фильтруем чек-лист по флагам
+# Filter the checklist by flags
 EFFECTIVE_CHECKS=()
 SKIPPED_CHECKS=()
 for entry in "${CHECKS[@]}"; do
@@ -1779,33 +1779,33 @@ for entry in "${CHECKS[@]}"; do
 done
 CHECK_TOTAL=${#EFFECTIVE_CHECKS[@]}
 
-# Заголовок прогона
+# Run header
 mode_label=""
 [ "$QUICK"  = "1" ] && mode_label="$mode_label quick"
 [ "$NO_NET" = "1" ] && mode_label="$mode_label no-net"
 [ "$DRY_RUN" = "1" ] && mode_label="$mode_label dry-run"
 if [ -n "$mode_label" ]; then
-    echo -e "${DIM}Режим:$mode_label · $CHECK_TOTAL проверок (пропущено ${#SKIPPED_CHECKS[@]})${NC}"
+    echo -e "${DIM}Mode:$mode_label · $CHECK_TOTAL checks (skipped ${#SKIPPED_CHECKS[@]})${NC}"
 else
-    echo -e "${DIM}$CHECK_TOTAL проверок${NC}"
+    echo -e "${DIM}$CHECK_TOTAL checks${NC}"
 fi
 echo
 
 DIAG_START=$(date +%s)
 for entry in "${EFFECTIVE_CHECKS[@]}"; do
-    # name может содержать ":" (напр. "Speed: 1-flow"), поэтому % не %%
+    # name may contain ":" (e.g. "Speed: 1-flow"), so use % not %%
     name=${entry%:*}
     fn=${entry##*:}
     run_check "$name" "$fn"
 done
 DIAG_DURATION=$(( $(date +%s) - DIAG_START ))
 
-# Покажем пропущенные одной строкой в конце
+# Show the skipped ones in a single block at the end
 if [ ${#SKIPPED_CHECKS[@]} -gt 0 ]; then
     echo
-    echo -e "  ${DIM}пропущено ${#SKIPPED_CHECKS[@]} проверок:${NC}"
+    echo -e "  ${DIM}skipped ${#SKIPPED_CHECKS[@]} checks:${NC}"
     for skip in "${SKIPPED_CHECKS[@]}"; do
-        # формат: "name:fn|reason" — name может содержать ":"
+        # format: "name:fn|reason" — name may contain ":"
         skip_entry=${skip%|*}
         skip_reason=${skip##*|}
         skip_name=${skip_entry%:*}
@@ -1813,24 +1813,24 @@ if [ ${#SKIPPED_CHECKS[@]} -gt 0 ]; then
     done
 fi
 echo
-echo -e "  ${DIM}прогон занял ${DIAG_DURATION}s${NC}"
+echo -e "  ${DIM}run took ${DIAG_DURATION}s${NC}"
 
 # ════════════════════════════════════════════════════════════════════
-# СВОДКА
+# SUMMARY
 # ════════════════════════════════════════════════════════════════════
 
-# Категоризация ключей сводки (мап имени → раздел)
+# Categorize summary keys (map name → section)
 classify_kv() {
     case "$1" in
-        Хост|IP|"Гео по базам"|"Гео по latency"|ASN|Ядро|CPU|RAM|NIC|Туннели|Xray)  echo sys ;;
-        "TCP CC"|"TCP tuning"|Conntrack|DNS|PMTU|"Loss до Google"|"Маршрут"|QUIC/HTTP3|IPv6) echo net ;;
+        Host|IP|"Geo (DBs)"|"Geo by latency"|ASN|Kernel|CPU|RAM|NIC|Tunnels|Xray)  echo sys ;;
+        "TCP CC"|"TCP tuning"|Conntrack|DNS|PMTU|"Loss to Google"|"Route"|QUIC/HTTP3|IPv6) echo net ;;
         "Speed (1-flow)"|"Speed (4-flow)"|"CDN speed"|Bufferbloat|"Variance (5x)"|"TCP retrans") echo perf ;;
-        "Сервисы"|"Cloudflare colo"|"Reverse DNS") echo svc ;;
+        "Services"|"Cloudflare colo"|"Reverse DNS") echo svc ;;
         *) echo other ;;
     esac
 }
 
-# Считаем оценку: bad → -3, warn → -1
+# Compute the score: bad → -3, warn → -1
 ok_count=0; warn_count=0; bad_count=0; info_count=0; penalty=0
 while IFS='|' read -r sev tag msg; do
     case "$sev" in
@@ -1842,7 +1842,7 @@ done < "$FINDINGS_FILE"
 score=$(( 100 - penalty * 5 ))
 [ "$score" -lt 0 ] && score=0
 
-# Хелперы для рендера
+# Render helpers
 print_section_header() {
     echo -e "  ${C}${BOLD}▌${NC} ${BOLD}$1${NC}"
 }
@@ -1856,7 +1856,7 @@ print_kv_aligned() {
     printf "    ${DIM}%s%*s${NC}  %s\n" "$k" "$pad" "" "$v"
 }
 
-# Score-gauge: 20-сегментный бар с цветом по диапазону
+# Score gauge: 20-segment bar colored by range
 print_score_gauge() {
     local s=$1
     local filled=$(( s * 20 / 100 ))
@@ -1875,12 +1875,12 @@ print_score_gauge() {
         "$BOLD" "$NC" "$bar" "$s"
 }
 
-# Заголовок раздела
+# Section header
 echo
-echo -e "${DIM}  ─────────────────────────────────  СВОДКА  ─────────────────────────────────${NC}"
+echo -e "${DIM}  ────────────────────────────────  SUMMARY  ────────────────────────────────${NC}"
 echo
 
-# Группируем сводку по категориям
+# Group the summary by category
 section_started=""
 print_category() {
     local cat=$1 title=$2
@@ -1897,10 +1897,10 @@ print_category() {
         fi
     done < "$SUMMARY_FILE"
 }
-print_category sys  "Система"
-print_category net  "Сеть"
-print_category perf "Производительность"
-print_category svc  "Сервисы и репутация"
+print_category sys  "System"
+print_category net  "Network"
+print_category perf "Performance"
+print_category svc  "Services and reputation"
 
 # Score gauge + verdict
 echo
@@ -1909,38 +1909,38 @@ print_score_gauge "$score"
 echo
 echo
 
-# Вердикт
+# Verdict
 verdict_icon=""; verdict_color=""; verdict_text=""; verdict_sub=""
 if [ "$bad_count" = "0" ] && [ "$warn_count" = "0" ]; then
     verdict_icon="✓"; verdict_color=$G
-    verdict_text="нода в порядке"
-    verdict_sub="видео и сервисы должны работать без проблем"
+    verdict_text="node is in good shape"
+    verdict_sub="video and services should work without issues"
 elif [ "$bad_count" = "0" ]; then
     verdict_icon="⚠"; verdict_color=$Y
-    verdict_text="рабочее с замечаниями"
-    verdict_sub="$warn_count предупреждений · поедет, но не идеально"
+    verdict_text="working, with caveats"
+    verdict_sub="$warn_count warnings · it'll run, but not perfectly"
 elif [ "$bad_count" -le 1 ]; then
     verdict_icon="⚠"; verdict_color=$Y
-    verdict_text="проблемы есть"
-    verdict_sub="$bad_count критичных + $warn_count предупреждений"
+    verdict_text="there are problems"
+    verdict_sub="$bad_count critical + $warn_count warnings"
 else
     verdict_icon="✗"; verdict_color=$R
-    verdict_text="непригодна для видео"
-    verdict_sub="$bad_count критичных + $warn_count предупреждений"
+    verdict_text="unfit for video"
+    verdict_sub="$bad_count critical + $warn_count warnings"
 fi
 echo -e "  ${verdict_color}${BOLD}${verdict_icon}  ${verdict_text}${NC}"
 echo -e "     ${DIM}${verdict_sub}${NC}"
 echo
 
-# Если главная причина — пиринг ASN, отдельная подсветка
+# If the root cause is ASN peering, highlight it separately
 if grep -q -E '^3\|(loss|route)\|' "$FINDINGS_FILE"; then
-    echo -e "  ${R}${BOLD}┃${NC}  ${R}${BOLD}ОСНОВНАЯ ПРИЧИНА${NC} ${DIM}—${NC} битый пиринг провайдера"
-    echo -e "  ${R}${BOLD}┃${NC}  ${DIM}потери на маршруте к Google. sysctl тут НЕ помогает.${NC}"
-    echo -e "  ${R}${BOLD}┃${NC}  ${DIM}решение — смена хостинга на другой ASN.${NC}"
+    echo -e "  ${R}${BOLD}┃${NC}  ${R}${BOLD}ROOT CAUSE${NC} ${DIM}—${NC} broken provider peering"
+    echo -e "  ${R}${BOLD}┃${NC}  ${DIM}loss on the route to Google. sysctl does NOT help here.${NC}"
+    echo -e "  ${R}${BOLD}┃${NC}  ${DIM}the fix — switch hosting to a different ASN.${NC}"
     echo
 fi
 
-# Findings, сгруппированные по severity
+# Findings, grouped by severity
 if [ -s "$FINDINGS_FILE" ]; then
     print_findings_group() {
         local sev=$1 title=$2 color=$3 icon=$4
@@ -1955,23 +1955,23 @@ if [ -s "$FINDINGS_FILE" ]; then
         done
         echo
     }
-    print_findings_group 3 "Критичные"     "$R" "✗"
-    print_findings_group 2 "Предупреждения" "$Y" "⚠"
-    print_findings_group 1 "Информация"    "$B" "·"
+    print_findings_group 3 "Critical"     "$R" "✗"
+    print_findings_group 2 "Warnings"      "$Y" "⚠"
+    print_findings_group 1 "Info"         "$B" "·"
 fi
 
 prompt_and_apply_fixes
 
 # ════════════════════════════════════════════════════════════════════
-# СОХРАНЕНИЕ СВОДКИ В ОТДЕЛЬНЫЙ ФАЙЛ
+# SAVING THE SUMMARY TO A SEPARATE FILE
 # ════════════════════════════════════════════════════════════════════
 SUMMARY_TXT="/tmp/node-diagnostic-summary-$(date +%Y%m%d-%H%M%S).txt"
 {
     echo "Node Diagnostic v$SCRIPT_VERSION — $(date -u +'%Y-%m-%d %H:%M UTC')"
     echo "Hostname: $(hostname)"
-    echo "Длительность прогона: ${DIAG_DURATION}s · ${CHECK_TOTAL} проверок"
+    echo "Run duration: ${DIAG_DURATION}s · ${CHECK_TOTAL} checks"
     echo
-    echo "═══ Сводная таблица ═══"
+    echo "═══ Summary table ═══"
     while IFS='|' read -r k v; do
         clen=$(printf '%s' "$k" | wc -m)
         pad=$(( 22 - clen ))
@@ -1979,9 +1979,9 @@ SUMMARY_TXT="/tmp/node-diagnostic-summary-$(date +%Y%m%d-%H%M%S).txt"
         printf "  %s%*s %s\n" "$k" "$pad" "" "$v"
     done < "$SUMMARY_FILE"
     echo
-    echo "═══ Найденные проблемы ═══"
+    echo "═══ Issues found ═══"
     if [ ! -s "$FINDINGS_FILE" ]; then
-        echo "  (нет)"
+        echo "  (none)"
     else
         sort -t'|' -k1 -rn "$FINDINGS_FILE" | while IFS='|' read -r sev tag msg; do
             case "$sev" in
@@ -1994,35 +1994,35 @@ SUMMARY_TXT="/tmp/node-diagnostic-summary-$(date +%Y%m%d-%H%M%S).txt"
     echo
     echo "═══ Score: $score/100 ═══"
     echo
-    echo "Полный лог: $LOG"
+    echo "Full log: $LOG"
     if [ "${BACKUP_DONE:-0}" = "1" ]; then
-        echo "Backup настроек: $BACKUP_DIR/*-${BACKUP_TS}.*"
+        echo "Settings backup: $BACKUP_DIR/*-${BACKUP_TS}.*"
     fi
 } > "$SUMMARY_TXT"
 
 echo
-echo -e "${DIM}  ─────────────────────────────────  ИТОГО  ─────────────────────────────────${NC}"
+echo -e "${DIM}  ─────────────────────────────────  TOTAL  ─────────────────────────────────${NC}"
 echo
 
-# Артефакты — компактным списком с иконками
-printf "  ${DIM}%-12s${NC} %s\n" "Полный лог" "$LOG"
-printf "  ${DIM}%-12s${NC} %s\n" "Сводка"     "$SUMMARY_TXT"
+# Artifacts — compact list with icons
+printf "  ${DIM}%-12s${NC} %s\n" "Full log" "$LOG"
+printf "  ${DIM}%-12s${NC} %s\n" "Summary"  "$SUMMARY_TXT"
 if [ "${BACKUP_DONE:-0}" = "1" ]; then
     printf "  ${DIM}%-12s${NC} %s\n" "Backup" "$BACKUP_DIR/*-${BACKUP_TS}.*"
 fi
 echo
 
-# Откат — только если что-то реально применили
+# Rollback — only if something was actually applied
 if [ "${BACKUP_DONE:-0}" = "1" ]; then
-    echo -e "  ${DIM}${BOLD}⤺  Откат фиксов:${NC}"
+    echo -e "  ${DIM}${BOLD}⤺  Roll back fixes:${NC}"
     echo -e "  ${DIM}    rm /etc/sysctl.d/99-vpn-tuning.conf 2>/dev/null${NC}"
     echo -e "  ${DIM}    iptables -t mangle -F FORWARD; iptables -t mangle -F OUTPUT${NC}"
     echo -e "  ${DIM}    systemctl disable --now vpn-rps.service vpn-ring.service 2>/dev/null${NC}"
-    echo -e "  ${DIM}    sysctl --system   ${DIM}# или восстановить из $BACKUP_DIR/sysctl-${BACKUP_TS}.txt${NC}"
+    echo -e "  ${DIM}    sysctl --system   ${DIM}# or restore from $BACKUP_DIR/sysctl-${BACKUP_TS}.txt${NC}"
     echo
 fi
 
-# Подвал с метаданными прогона
-printf "  ${DIM}%s · %ds · %d/%d проверок · v%s${NC}\n" \
+# Footer with run metadata
+printf "  ${DIM}%s · %ds · %d/%d checks · v%s${NC}\n" \
     "$(date +'%H:%M:%S')" "$DIAG_DURATION" "$CHECK_TOTAL" "${#CHECKS[@]}" "$SCRIPT_VERSION"
 echo
