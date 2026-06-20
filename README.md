@@ -4,7 +4,7 @@ Diagnose a VPN/Linux node for YouTube, video CDNs and popular services in one co
 
 ```
 ╔═════════════════════════════════════════════════════════════════════╗
-║   Node Diagnostic v3.3 · 2026-05-06 18:42 UTC                       ║
+║   Node Diagnostic v3.4 · 2026-05-06 18:42 UTC                       ║
 ╚═════════════════════════════════════════════════════════════════════╝
 
 [ 1/23] ✓ Identification             host.example.com · Helsinki/FI · ~2ms→Tallinn
@@ -42,11 +42,11 @@ Diagnose a VPN/Linux node for YouTube, video CDNs and popular services in one co
 
 # Just run it
 ```bash
-curl -sSL https://raw.githubusercontent.com/Case211/node-diagnostic/main/node-diagnostic.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/itsvenoxy/node-diagnostic/main/node-diagnostic.sh | sudo bash
 ```
 # Or download and run
 ```bash
-wget https://raw.githubusercontent.com/Case211/node-diagnostic/main/node-diagnostic.sh
+wget https://raw.githubusercontent.com/itsvenoxy/node-diagnostic/main/node-diagnostic.sh
 sudo bash node-diagnostic.sh
 ```
 

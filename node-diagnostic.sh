@@ -2,7 +2,7 @@
 # node-diagnostic.sh — diagnose a VPN/Linux node for YouTube, video CDNs and popular services.
 # Compact dashboard: progress bar → summary → verdict → fix application.
 # A detailed log is written to /tmp/node-diagnostic-<ts>.log
-# Source: https://github.com/Case211/node-diagnostic
+# Source: https://github.com/itsvenoxy/node-diagnostic
 # Run:
 #   sudo bash node-diagnostic.sh           # normal run
 #   sudo bash node-diagnostic.sh --quick   # without the long tests (~1 min instead of ~5)
