@@ -92,6 +92,14 @@ Applies all recommended optimizations unconditionally:
 - **vm.swappiness = 10** (`/etc/sysctl.d/98-swappiness.conf`)
 
 ```bash
+# Just run it
+curl -sSL https://raw.githubusercontent.com/itsvenoxy/node-diagnostic/main/apply-tuning.sh | sudo bash
+# Or download and run
+wget https://raw.githubusercontent.com/itsvenoxy/node-diagnostic/main/apply-tuning.sh
+sudo bash apply-tuning.sh
+```
+
+```bash
 sudo bash apply-tuning.sh             # apply everything
 sudo bash apply-tuning.sh --dry-run   # show what would change, change nothing
 sudo bash apply-tuning.sh -i eth0     # force a specific interface
@@ -109,6 +117,14 @@ Cleanly reverses everything `apply-tuning.sh` (or `node-diagnostic.sh`) did:
 - disables + removes `vpn-rps.service` and `vpn-ring.service`
 - optionally restores `net.*` sysctls from the latest backup snapshot (`--restore`)
 - clears the journal `/etc/node-diagnostic.applied`
+
+```bash
+# Just run it
+curl -sSL https://raw.githubusercontent.com/itsvenoxy/node-diagnostic/main/revert-tuning.sh | sudo bash
+# Or download and run
+wget https://raw.githubusercontent.com/itsvenoxy/node-diagnostic/main/revert-tuning.sh
+sudo bash revert-tuning.sh
+```
 
 ```bash
 sudo bash revert-tuning.sh            # remove tuning, reload defaults
