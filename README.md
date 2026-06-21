@@ -77,6 +77,47 @@ After the run, a list of relevant fixes is shown (only the ones that will actual
 
 Before applying — automatic backup (`sysctl -a` and `iptables-save`) into `/var/backups/node-diagnostic/`. History of applied fixes — in `/etc/node-diagnostic.applied`. At the end a rollback command is printed.
 
+## Standalone tuning scripts
+
+Two companion scripts let you apply or undo the same optimizations **without running the full diagnosis first**. They share the paths, systemd units, backup dir and journal with `node-diagnostic.sh`, so they're fully interoperable.
+
+### `apply-tuning.sh` — apply everything at once
+
+Applies all recommended optimizations unconditionally:
+
+- **sysctl** — BBR + cake, 64MB buffers, `tcp_mtu_probing`, `tcp_fastopen`, conntrack 524288 (`/etc/sysctl.d/99-vpn-tuning.conf`)
+- **iptables MSS clamp** — `--clamp-mss-to-pmtu` on FORWARD/OUTPUT, persisted via `netfilter-persistent` or `/etc/iptables/rules.v4`
+- **RPS** — spread softirq across all CPUs, persisted via `vpn-rps.service`
+- **NIC ring buffers** — raised to maximum, persisted via `vpn-ring.service`
+- **vm.swappiness = 10** (`/etc/sysctl.d/98-swappiness.conf`)
+
+```bash
+sudo bash apply-tuning.sh             # apply everything
+sudo bash apply-tuning.sh --dry-run   # show what would change, change nothing
+sudo bash apply-tuning.sh -i eth0     # force a specific interface
+sudo bash apply-tuning.sh -h          # help
+```
+
+A backup snapshot (`sysctl -a` + `iptables-save`) is written to `/var/backups/node-diagnostic/` before any change, and every action is recorded in `/etc/node-diagnostic.applied`.
+
+### `revert-tuning.sh` — undo it all
+
+Cleanly reverses everything `apply-tuning.sh` (or `node-diagnostic.sh`) did:
+
+- removes `99-vpn-tuning.conf` and `98-swappiness.conf`
+- deletes the iptables MSS-clamp rules from FORWARD/OUTPUT
+- disables + removes `vpn-rps.service` and `vpn-ring.service`
+- optionally restores `net.*` sysctls from the latest backup snapshot (`--restore`)
+- clears the journal `/etc/node-diagnostic.applied`
+
+```bash
+sudo bash revert-tuning.sh            # remove tuning, reload defaults
+sudo bash revert-tuning.sh --restore  # also restore net.* from the latest backup
+sudo bash revert-tuning.sh --dry-run  # show what would be removed
+```
+
+> Without `--restore`, the running `net.*` values stay in effect until the next reboot (the drop-in files are gone, so they won't reapply). Backups in `/var/backups/node-diagnostic/` are never deleted.
+
 ## Run artifacts
 
 - `/tmp/node-diagnostic-<ts>.log` — full detailed log
